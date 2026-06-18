@@ -1,0 +1,20 @@
+export const config = {
+  port: parseInt(process.env['PORT'] || '2567', 10),
+  dbUrl: process.env['DATABASE_URL'] || 'postgresql://localhost:5432/flyff',
+  redisUrl: process.env['REDIS_URL'] || 'redis://localhost:6379',
+  jwtSecret: process.env['JWT_SECRET'] || 'super-secret-jwt-key-change-in-production',
+  jwtExpiresIn: process.env['JWT_EXPIRES_IN'] || '24h',
+  bcryptRounds: parseInt(process.env['BCRYPT_ROUNDS'] || '10', 10),
+  gameTickRate: parseInt(process.env['GAME_TICK_RATE'] || '50', 10),
+  maxPlayersPerWorld: parseInt(process.env['MAX_PLAYERS_PER_WORLD'] || '200', 10),
+  spawnRadius: parseInt(process.env['SPAWN_RADIUS'] || '50', 10),
+  worldBounds: {
+    minX: parseInt(process.env['WORLD_MIN_X'] || '-500', 10),
+    maxX: parseInt(process.env['WORLD_MAX_X'] || '500', 10),
+    minZ: parseInt(process.env['WORLD_MIN_Z'] || '-500', 10),
+    maxZ: parseInt(process.env['WORLD_MAX_Z'] || '500', 10),
+  },
+  logLevel: process.env['LOG_LEVEL'] || 'info',
+  environment: process.env['NODE_ENV'] || 'development',
+  adminKey: process.env['ADMIN_KEY'] || 'admin-secret-key',
+};

@@ -1,0 +1,43 @@
+{
+  "name": "SaintMorning",
+  "terrain": {
+    "size": 400,
+    "color": [0.25, 0.5, 0.12],
+    "type": "hilly",
+    "hills": [
+      { "position": [-50, 0, -30], "scale": [15, 3, 15] },
+      { "position": [60, 0, 40], "scale": [12, 2.5, 12] },
+      { "position": [-80, 0, 80], "scale": [18, 3.5, 18] },
+      { "position": [30, 0, -100], "scale": [14, 2, 14] },
+      { "position": [120, 0, -40], "scale": [16, 3, 16] },
+      { "position": [-100, 0, -120], "scale": [13, 2.5, 13] }
+    ]
+  },
+  "playerSpawn": { "x": -180, "y": 0, "z": -180 },
+  "bounds": { "min": -200, "max": 200 },
+  "trees": 50,
+  "buildings": [
+    { "name": "entrance-gate", "position": [-180, 0, -180], "size": [12, 6, 3], "color": [0.5, 0.4, 0.3] },
+    { "name": "outpost1", "position": [80, 0, -100], "size": [8, 4, 6], "color": [0.4, 0.3, 0.2] },
+    { "name": "outpost2", "position": [-50, 0, 120], "size": [7, 3.5, 5], "color": [0.45, 0.35, 0.25] }
+  ],
+  "npcs": [
+    { "name": "Guard NPC", "type": "guard", "position": [-175, 0, -180] }
+  ],
+  "monsterSpawns": [
+    { "type": "Mong", "level": [3, 5], "zone": { "x": -80, "z": -80, "radius": 30 }, "count": 10 },
+    { "type": "Lawolf", "level": [5, 8], "zone": { "x": 50, "z": 0, "radius": 30 }, "count": 8 },
+    { "type": "Giant Guard", "level": [8, 10], "zone": { "x": 100, "z": 100, "radius": 30 }, "count": 6 }
+  ],
+  "gatheringNodes": [
+    { "type": "ore", "color": [0.6, 0.5, 0.4], "zone": { "x": -120, "z": -50, "radius": 15 }, "count": 5 },
+    { "type": "herb", "color": [0.2, 0.8, 0.2], "zone": { "x": -30, "z": 80, "radius": 15 }, "count": 5 }
+  ],
+  "environment": {
+    "ambientColor": [0.4, 0.45, 0.5],
+    "fogColor": [0.65, 0.7, 0.75],
+    "fogStart": 80,
+    "fogEnd": 200,
+    "fogType": "linear"
+  }
+}

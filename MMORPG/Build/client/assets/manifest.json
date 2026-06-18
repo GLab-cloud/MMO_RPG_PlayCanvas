@@ -1,0 +1,92 @@
+[
+  {
+    "name": "character-body",
+    "type": "model",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/3D/Characters/Models/character_robot.glb",
+    "license": "CC0"
+  },
+  {
+    "name": "ground-grass",
+    "type": "texture",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/3D/Environment/Ground/textures/grass_01.png",
+    "license": "CC0"
+  },
+  {
+    "name": "ground-dirt",
+    "type": "texture",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/3D/Environment/Ground/textures/dirt_01.png",
+    "license": "CC0"
+  },
+  {
+    "name": "skybox-day",
+    "type": "texture",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/3D/Environment/Skybox/textures/skybox_day.png",
+    "license": "CC0"
+  },
+  {
+    "name": "building-wood",
+    "type": "texture",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/3D/Environment/Buildings/textures/wood_01.png",
+    "license": "CC0"
+  },
+  {
+    "name": "building-stone",
+    "type": "texture",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/3D/Environment/Buildings/textures/stone_01.png",
+    "license": "CC0"
+  },
+  {
+    "name": "tree-trunk",
+    "type": "texture",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/3D/Environment/Nature/textures/bark_01.png",
+    "license": "CC0"
+  },
+  {
+    "name": "tree-leaves",
+    "type": "texture",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/3D/Environment/Nature/textures/leaves_01.png",
+    "license": "CC0"
+  },
+  {
+    "name": "ui-panel",
+    "type": "texture",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/2D/UI/Textures/panel_blue.png",
+    "license": "CC0"
+  },
+  {
+    "name": "ui-button",
+    "type": "texture",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/2D/UI/Textures/button_blue.png",
+    "license": "CC0"
+  },
+  {
+    "name": "footstep-sound",
+    "type": "sound",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/Audio/FX/Footsteps/footstep_grass_01.wav",
+    "license": "CC0"
+  },
+  {
+    "name": "hit-sound",
+    "type": "sound",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/Audio/FX/Combat/hit_01.wav",
+    "license": "CC0"
+  },
+  {
+    "name": "pickup-sound",
+    "type": "sound",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/Audio/FX/Items/pickup_01.wav",
+    "license": "CC0"
+  },
+  {
+    "name": "levelup-sound",
+    "type": "sound",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/Audio/FX/UI/level_up.wav",
+    "license": "CC0"
+  },
+  {
+    "name": "mount-sound",
+    "type": "sound",
+    "url": "https://raw.githubusercontent.com/Kenney/Assets/main/Audio/FX/Vehicles/engine_start.wav",
+    "license": "CC0"
+  }
+]
