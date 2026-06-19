@@ -1,59 +1,61 @@
-export interface PlayerState {
-  id: string;
-  sessionId: string;
-  name: string;
-  level: number;
-  xp: number;
-  class: string;
-  strength: number;
-  stamina: number;
-  dexterity: number;
-  intelligence: number;
-  statPoints: number;
-  hp: number;
-  maxHp: number;
-  mp: number;
-  maxMp: number;
-  attack: number;
-  defense: number;
-  magicAttack: number;
-  magicDefense: number;
-  x: number;
-  z: number;
-  rotation: number;
-  speed: number;
-  gold: number;
-  mounted: boolean;
-  mountId: string | null;
-  partyId: string | null;
-  guildId: string | null;
-  connected: boolean;
+import { Schema, MapSchema, type } from '@colyseus/schema';
+
+export class PlayerState extends Schema {
+  @type('string') id: string = '';
+  @type('string') sessionId: string = '';
+  @type('string') name: string = '';
+  @type('number') level: number = 1;
+  @type('number') xp: number = 0;
+  @type('string') class: string = 'adventurer';
+  @type('number') strength: number = 5;
+  @type('number') stamina: number = 5;
+  @type('number') dexterity: number = 5;
+  @type('number') intelligence: number = 5;
+  @type('number') statPoints: number = 0;
+  @type('number') hp: number = 100;
+  @type('number') maxHp: number = 100;
+  @type('number') mp: number = 50;
+  @type('number') maxMp: number = 50;
+  @type('number') attack: number = 10;
+  @type('number') defense: number = 5;
+  @type('number') magicAttack: number = 5;
+  @type('number') magicDefense: number = 3;
+  @type('number') x: number = 0;
+  @type('number') z: number = 0;
+  @type('number') rotation: number = 0;
+  @type('number') speed: number = 5;
+  @type('number') gold: number = 100;
+  @type('boolean') mounted: boolean = false;
+  @type('string') mountId: string = '';
+  @type('string') partyId: string = '';
+  @type('string') guildId: string = '';
+  @type('boolean') connected: boolean = true;
 }
 
-export interface MonsterState {
-  id: string;
-  templateId: string;
-  name: string;
-  x: number;
-  z: number;
-  hp: number;
-  maxHp: number;
-  level: number;
-  attack: number;
-  defense: number;
-  magicAttack: number;
-  magicDefense: number;
-  speed: number;
-  aggroRange: number;
-  attackRange: number;
-  xpReward: number;
-  state: string;
-  targetId: string | null;
+export class MonsterState extends Schema {
+  @type('string') id: string = '';
+  @type('string') templateId: string = '';
+  @type('string') name: string = '';
+  @type('number') x: number = 0;
+  @type('number') z: number = 0;
+  @type('number') hp: number = 50;
+  @type('number') maxHp: number = 50;
+  @type('number') level: number = 1;
+  @type('number') attack: number = 5;
+  @type('number') defense: number = 2;
+  @type('number') magicAttack: number = 0;
+  @type('number') magicDefense: number = 1;
+  @type('number') speed: number = 2;
+  @type('number') aggroRange: number = 8;
+  @type('number') attackRange: number = 1.5;
+  @type('number') xpReward: number = 15;
+  @type('string') state: string = 'idle';
+  @type('string') targetId: string = '';
 }
 
-export interface WorldStateSchema {
-  players: Map<string, PlayerState>;
-  monsters: Map<string, MonsterState>;
-  timeOfDay: number;
-  weather: string;
+export class WorldState extends Schema {
+  @type({ map: PlayerState }) players: MapSchema<PlayerState> = new MapSchema();
+  @type({ map: MonsterState }) monsters: MapSchema<MonsterState> = new MapSchema();
+  @type('number') timeOfDay: number = 0;
+  @type('string') weather: string = 'clear';
 }

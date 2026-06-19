@@ -31,7 +31,6 @@ export class GameClient {
     this.sceneManager = new SceneManager(this.pcApp);
     this.network = new NetworkManager(this.pcApp, this.sceneManager);
     this.ui = new UIManager(this.pcApp);
-    this.playerController = new PlayerController(this.pcApp, this.network, this.inputController, this.cameraController);
 
     await this.app.init();
 

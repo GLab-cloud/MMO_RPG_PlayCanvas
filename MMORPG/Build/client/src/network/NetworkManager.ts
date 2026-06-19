@@ -158,12 +158,30 @@ export class NetworkManager {
   private setupWorldHandlers(): void {
     if (!this.worldRoom) return;
 
+    this.stateSync.setLocalSessionId(this.worldRoom.sessionId);
+
     this.worldRoom.onStateChange((state) => {
       this.stateSync.handleStateChange(state);
     });
 
     this.worldRoom.onMessage('ping', () => {
       // handled automatically
+    });
+
+    this.worldRoom.onMessage('pong', () => {
+      // latency response - handled by send callback
+    });
+
+    this.worldRoom.onMessage('world:joined', (data: { playerId: string; sessionId: string; x: number; z: number }) => {
+      console.log(`Spawned at (${data.x}, ${data.z})`);
+    });
+
+    this.worldRoom.onMessage('player:joined', (data: { id: string; name: string; x: number; z: number }) => {
+      console.log(`Player joined: ${data.name} (${data.id}) at (${data.x}, ${data.z})`);
+    });
+
+    this.worldRoom.onMessage('player:left', (data: { id: string; name: string }) => {
+      console.log(`Player left: ${data.name} (${data.id})`);
     });
 
     this.worldRoom.onLeave(() => {
@@ -181,15 +199,25 @@ export class NetworkManager {
     setInterval(() => this.measureLatency(), 5000);
   }
 
-  private async measureLatency(): Promise<void> {
+  private measureLatency(): void {
     if (!this.worldRoom) return;
     const start = Date.now();
-    try {
-      await this.worldRoom.send('ping');
-      this.latency = Date.now() - start;
-    } catch {
-      this.latency = -1;
-    }
+    let resolved = false;
+    const unreg = this.worldRoom.onMessage('pong', () => {
+      if (!resolved) {
+        resolved = true;
+        this.latency = Date.now() - start;
+        unreg();
+      }
+    });
+    this.worldRoom.send('ping');
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        this.latency = -1;
+        unreg();
+      }
+    }, 5000);
   }
 
   private scheduleReconnect(): void {

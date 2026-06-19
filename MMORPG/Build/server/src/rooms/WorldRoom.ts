@@ -1,7 +1,7 @@
 import colyseus from 'colyseus';
 const { Room } = colyseus;
 import type { Client } from 'colyseus';
-import { WorldStateSchema, PlayerState, MonsterState } from '../schema/WorldState.js';
+import { WorldState, PlayerState, MonsterState } from '../schema/WorldState.js';
 import { MovementHandler } from '../handlers/MovementHandler.js';
 import { CombatHandler } from '../handlers/CombatHandler.js';
 import { InventoryHandler, Item } from '../handlers/InventoryHandler.js';
@@ -24,7 +24,7 @@ import { generateId } from '../utils/Helpers.js';
 import { config } from '../config.js';
 import { hpFromStats, mpFromStats } from '../utils/Formulas.js';
 
-const MONSTER_TEMPLATES: Record<string, Partial<MonsterState>> = {
+const MONSTER_TEMPLATES: Record<string, any> = {
   rat: { name: 'Rat', level: 1, hp: 30, maxHp: 30, attack: 5, defense: 2, magicAttack: 0, magicDefense: 1, speed: 2, aggroRange: 8, attackRange: 1.5, xpReward: 15 },
   wolf: { name: 'Wolf', level: 5, hp: 80, maxHp: 80, attack: 12, defense: 5, magicAttack: 0, magicDefense: 2, speed: 4, aggroRange: 12, attackRange: 1.5, xpReward: 40 },
   bear: { name: 'Bear', level: 10, hp: 200, maxHp: 200, attack: 20, defense: 10, magicAttack: 0, magicDefense: 5, speed: 2.5, aggroRange: 10, attackRange: 2, xpReward: 100 },
@@ -37,7 +37,7 @@ const MONSTER_TEMPLATES: Record<string, Partial<MonsterState>> = {
   ghost: { name: 'Ghost', level: 12, hp: 100, maxHp: 100, attack: 18, defense: 5, magicAttack: 20, magicDefense: 15, speed: 4, aggroRange: 14, attackRange: 3, xpReward: 130 },
 };
 
-export class WorldRoom extends Room<WorldStateSchema> {
+export class WorldRoom extends Room<WorldState> {
   maxClients = config.maxPlayersPerWorld;
 
   private movementHandler!: MovementHandler;
@@ -69,12 +69,7 @@ export class WorldRoom extends Room<WorldStateSchema> {
   private activeTrades: Map<string, string> = new Map();
 
   onCreate(_options: any): void {
-    this.setState({
-      players: new Map(),
-      monsters: new Map(),
-      timeOfDay: 0,
-      weather: 'clear',
-    });
+    this.setState(new WorldState());
 
     this.antiCheat = new AntiCheat();
     this.movementHandler = new MovementHandler(this.antiCheat);
@@ -112,31 +107,32 @@ export class WorldRoom extends Room<WorldStateSchema> {
     const template = MONSTER_TEMPLATES[templateId];
     if (!template) return '';
     const id = generateId();
-    const monster: MonsterState = {
-      id,
-      templateId,
-      name: template.name || 'Unknown',
-      x,
-      z,
-      hp: template.hp || 50,
-      maxHp: template.maxHp || 50,
-      level: template.level || 1,
-      attack: template.attack || 5,
-      defense: template.defense || 2,
-      magicAttack: template.magicAttack || 0,
-      magicDefense: template.magicDefense || 1,
-      speed: template.speed || 2,
-      aggroRange: template.aggroRange || 8,
-      attackRange: template.attackRange || 1.5,
-      xpReward: template.xpReward || 15,
-      state: 'idle',
-      targetId: null,
-    };
+    const monster = new MonsterState();
+    monster.id = id;
+    monster.templateId = templateId;
+    monster.name = template.name || 'Unknown';
+    monster.x = x;
+    monster.z = z;
+    monster.hp = template.hp || 50;
+    monster.maxHp = template.maxHp || 50;
+    monster.level = template.level || 1;
+    monster.attack = template.attack || 5;
+    monster.defense = template.defense || 2;
+    monster.magicAttack = template.magicAttack || 0;
+    monster.magicDefense = template.magicDefense || 1;
+    monster.speed = template.speed || 2;
+    monster.aggroRange = template.aggroRange || 8;
+    monster.attackRange = template.attackRange || 1.5;
+    monster.xpReward = template.xpReward || 15;
     this.state.monsters.set(id, monster);
     return id;
   }
 
   private registerMessageHandlers(): void {
+    this.onMessage('ping', (client: any) => {
+      client.send('pong', { t: Date.now() });
+    });
+
     this.onMessage('player:move', (client, data: { x: number; z: number; rotation: number }) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
@@ -291,7 +287,7 @@ export class WorldRoom extends Room<WorldStateSchema> {
       const result = this.partyHandler.handleLeave(client.sessionId);
       if (!result.success) { client.send('party:error', { error: result.error }); return; }
       const player = this.state.players.get(client.sessionId);
-      if (player) player.partyId = null;
+      if (player) player.partyId = '';
       if (result.disbanded) {
         this.broadcast('party:disbanded', {});
       }
@@ -301,7 +297,7 @@ export class WorldRoom extends Room<WorldStateSchema> {
       const result = this.partyHandler.handleKick(client.sessionId, data.targetId);
       if (!result.success) { client.send('party:error', { error: result.error }); return; }
       const kickedPlayer = this.state.players.get(data.targetId);
-      if (kickedPlayer) kickedPlayer.partyId = null;
+      if (kickedPlayer) kickedPlayer.partyId = '';
       const party = this.partyHandler.getParty(client.sessionId);
       this.broadcast('party:updated', { partyId: party?.id, members: party?.members || [] });
     });
@@ -339,7 +335,7 @@ export class WorldRoom extends Room<WorldStateSchema> {
       if (!player) return;
       const result = this.guildHandler.handleCreate(client.sessionId, player.name, data.name);
       if (!result.success) { client.send('guild:error', { error: result.error }); return; }
-      player.guildId = result.guildId || null;
+      player.guildId = result.guildId || '';
       client.send('guild:created', { guildId: result.guildId, name: data.name });
     });
 
@@ -362,7 +358,7 @@ export class WorldRoom extends Room<WorldStateSchema> {
       const player = this.state.players.get(client.sessionId);
       const result = this.guildHandler.handleLeave(client.sessionId);
       if (!result.success) { client.send('guild:error', { error: result.error }); return; }
-      if (player) player.guildId = null;
+      if (player) player.guildId = '';
       client.send('guild:left', {});
     });
 
@@ -433,7 +429,7 @@ export class WorldRoom extends Room<WorldStateSchema> {
       this.playerMounts.set(client.sessionId, null);
       if (player) {
         player.mounted = false;
-        player.mountId = null;
+        player.mountId = '';
         player.speed = 5;
       }
       client.send('mount:dismounted', {});
@@ -490,7 +486,7 @@ export class WorldRoom extends Room<WorldStateSchema> {
         monster.x = aiM.x;
         monster.z = aiM.z;
         monster.state = aiM.state;
-        monster.targetId = aiM.targetId;
+        monster.targetId = aiM.targetId || '';
       }
     }
 
@@ -506,38 +502,20 @@ export class WorldRoom extends Room<WorldStateSchema> {
     }
   }
 
+  private spawnCounter: number = 0;
+
   onJoin(client: Client, _options?: any, _auth?: any): void {
-    const player: PlayerState = {
-      id: generateId(),
-      sessionId: client.sessionId,
-      name: `Player_${client.sessionId.slice(0, 4)}`,
-      level: 1,
-      xp: 0,
-      class: 'adventurer',
-      strength: 5,
-      stamina: 5,
-      dexterity: 5,
-      intelligence: 5,
-      statPoints: 0,
-      hp: 100,
-      maxHp: 100,
-      mp: 50,
-      maxMp: 50,
-      attack: 10,
-      defense: 5,
-      magicAttack: 5,
-      magicDefense: 3,
-      x: Math.random() * 40 - 20,
-      z: Math.random() * 40 - 20,
-      rotation: 0,
-      speed: 5,
-      gold: 100,
-      mounted: false,
-      mountId: null,
-      partyId: null,
-      guildId: null,
-      connected: true,
-    };
+    const player = new PlayerState();
+    player.id = generateId();
+    player.sessionId = client.sessionId;
+    player.name = `Player_${client.sessionId.slice(0, 4)}`;
+
+    this.spawnCounter++;
+    const angle = (this.spawnCounter / 10) * Math.PI * 2;
+    const radius = 5 + (this.spawnCounter % 5) * 3;
+    player.x = Math.cos(angle) * radius;
+    player.z = Math.sin(angle) * radius;
+
     this.state.players.set(client.sessionId, player);
     this.playerInventories.set(client.sessionId, []);
     this.playerMounts.set(client.sessionId, null);
@@ -550,8 +528,8 @@ export class WorldRoom extends Room<WorldStateSchema> {
     });
     this.broadcast('player:joined', { id: player.id, name: player.name, x: player.x, z: player.z }, { except: client });
     client.send('world:state', {
-      players: Array.from(this.state.players.values()).map(p => ({ id: p.id, name: p.name, x: p.x, z: p.z, level: p.level })),
-      monsters: Array.from(this.state.monsters.values()).map(m => ({ id: m.id, name: m.name, x: m.x, z: m.z, hp: m.hp, maxHp: m.maxHp, level: m.level })),
+      players: Array.from(this.state.players.values()).map((p: PlayerState) => ({ id: p.id, name: p.name, x: p.x, z: p.z, level: p.level })),
+      monsters: Array.from(this.state.monsters.values()).map((m: MonsterState) => ({ id: m.id, name: m.name, x: m.x, z: m.z, hp: m.hp, maxHp: m.maxHp, level: m.level })),
       timeOfDay: this.state.timeOfDay,
       weather: this.state.weather,
     });

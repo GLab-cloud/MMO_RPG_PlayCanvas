@@ -18,47 +18,69 @@ export class StateSync {
     this.app = app;
   }
 
-  handleStateChange(state: any): void {
-    if (!state.entities) return;
+  private trackedIds: Set<string> = new Set();
+  private localSessionId: string = '';
 
-    for (const [id, data] of Object.entries(state.entities)) {
-      if (this.entities.has(id)) {
-        this.updateEntity(id, data as any);
-      } else {
-        this.createEntity(id, data as any);
+  setLocalSessionId(sessionId: string): void {
+    this.localSessionId = sessionId;
+  }
+
+  handleStateChange(state: any): void {
+    this.trackedIds.clear();
+
+    if (state.players) {
+      for (const [id, data] of state.players) {
+        if (id === this.localSessionId || data.sessionId === this.localSessionId) continue;
+        this.trackedIds.add(`player:${id}`);
+        if (this.entities.has(`player:${id}`)) {
+          this.updateEntity(`player:${id}`, data);
+        } else {
+          this.createEntity(`player:${id}`, data, 'player');
+        }
+      }
+    }
+
+    if (state.monsters) {
+      for (const [id, data] of state.monsters) {
+        this.trackedIds.add(`monster:${id}`);
+        if (this.entities.has(`monster:${id}`)) {
+          this.updateEntity(`monster:${id}`, data);
+        } else {
+          this.createEntity(`monster:${id}`, data, 'monster');
+        }
       }
     }
 
     for (const [id] of this.entities) {
-      if (!state.entities[id]) {
+      if (!this.trackedIds.has(id)) {
         this.removeEntity(id);
       }
     }
   }
 
-  private createEntity(id: string, data: { x: number; y: number; z: number; type: string }): void {
+  private createEntity(id: string, data: any, _type: string): void {
     const entity = new Entity(id);
     entity.addComponent('render', {
       type: 'box',
     });
-    entity.setLocalPosition(data.x, data.y, data.z);
+    entity.setLocalPosition(data.x || 0, 0, data.z || 0);
     this.app.root.addChild(entity);
 
     this.entities.set(id, {
       id,
       entity,
-      lastPosition: new Vec3(data.x, data.y, data.z),
-      targetPosition: new Vec3(data.x, data.y, data.z),
+      lastPosition: new Vec3(data.x || 0, 0, data.z || 0),
+      targetPosition: new Vec3(data.x || 0, 0, data.z || 0),
       lastUpdate: Date.now(),
     });
   }
 
-  private updateEntity(id: string, data: { x: number; y: number; z: number }): void {
+  private updateEntity(id: string, data: any): void {
     const tracked = this.entities.get(id);
     if (!tracked) return;
 
     tracked.lastPosition.copy(tracked.entity.getLocalPosition());
-    tracked.targetPosition.set(data.x, data.y, data.z);
+    tracked.targetPosition.set(data.x || 0, 0, data.z || 0);
     tracked.lastUpdate = Date.now();
   }
 
