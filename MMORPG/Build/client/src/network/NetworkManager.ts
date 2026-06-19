@@ -3,9 +3,33 @@ import * as pc from 'playcanvas';
 import { SceneManager } from '../scenes/SceneManager';
 import { StateSync } from './StateSync';
 
+export type ClientState = 'disconnected' | 'lobby' | 'world';
+
+export interface MatchInfo {
+  id: string;
+  name: string;
+  map: string;
+  maxPlayers: number;
+  playerCount: number;
+  players: { sessionId: string; name: string; isHost: boolean }[];
+  status: 'waiting' | 'in_progress';
+}
+
+export interface LobbyCallbacks {
+  onMatchList(matches: MatchInfo[]): void;
+  onMatchCreated(matchId: string): void;
+  onMatchJoined(matchId: string): void;
+  onMatchStarting(matchId: string): void;
+  onError(message: string): void;
+  onLobbyConnected(): void;
+  onWorldConnected(): void;
+  onDisconnected(): void;
+}
+
 export class NetworkManager {
   private client!: Client;
-  private room: Room | null = null;
+  private lobbyRoom: Room | null = null;
+  private worldRoom: Room | null = null;
   private pcApp: pc.Application;
   private sceneManager: SceneManager;
   private stateSync: StateSync;
@@ -13,6 +37,8 @@ export class NetworkManager {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private serverUrl: string = '';
+  private _state: ClientState = 'disconnected';
+  private callbacks: LobbyCallbacks | null = null;
 
   constructor(pcApp: pc.Application, sceneManager: SceneManager) {
     this.pcApp = pcApp;
@@ -20,62 +46,157 @@ export class NetworkManager {
     this.stateSync = new StateSync(pcApp);
   }
 
-  async connect(serverUrl: string): Promise<void> {
-    this.client = new Client(serverUrl);
+  setCallbacks(cb: LobbyCallbacks): void {
+    this.callbacks = cb;
+  }
+
+  get state(): ClientState {
+    return this._state;
+  }
+
+  async connectToLobby(serverUrl: string): Promise<void> {
+    if (this.lobbyRoom) return;
     this.serverUrl = serverUrl;
+    this.client = new Client(serverUrl);
 
     try {
-      this.room = await this.client.joinOrCreate('world');
-      this.setupHandlers();
+      this.lobbyRoom = await this.client.joinOrCreate('lobby');
+      this.setupLobbyHandlers();
+      this._state = 'lobby';
       this.reconnectAttempts = 0;
-      console.log('Connected to server');
+      console.log('Connected to lobby');
+      this.callbacks?.onLobbyConnected();
     } catch (err) {
-      console.error('Connection failed:', err);
-      this.scheduleReconnect(serverUrl);
+      console.error('Lobby connection failed:', err);
+      this.scheduleReconnect();
     }
   }
 
-  private setupHandlers(): void {
-    if (!this.room) return;
+  async joinWorldRoom(matchId: string): Promise<void> {
+    if (this.lobbyRoom) {
+      this.lobbyRoom.leave();
+      this.lobbyRoom = null;
+    }
 
-    this.room.onStateChange((state) => {
+    try {
+      // Use joinOrCreate to automatically create world room instance on first join
+      this.worldRoom = await this.client.joinOrCreate('world', { matchId });
+      this.setupWorldHandlers();
+      this._state = 'world';
+      this.reconnectAttempts = 0;
+      console.log('Joined world room for match:', matchId);
+      this.callbacks?.onWorldConnected();
+    } catch (err) {
+      console.error('Join world failed:', err);
+    }
+  }
+
+  leaveToLobby(): void {
+    if (this.worldRoom) {
+      this.worldRoom.leave();
+      this.worldRoom = null;
+    }
+    this._state = 'disconnected';
+    this.connectToLobby(this.serverUrl);
+  }
+
+  disconnect(): void {
+    this.lobbyRoom?.leave();
+    this.worldRoom?.leave();
+    this.lobbyRoom = null;
+    this.worldRoom = null;
+    this._state = 'disconnected';
+    this.callbacks?.onDisconnected();
+  }
+
+  sendToLobby(type: string, data: unknown): void {
+    if (this.lobbyRoom) {
+      this.lobbyRoom.send(type, data);
+    }
+  }
+
+  sendToWorld(type: string, data: unknown): void {
+    if (this.worldRoom) {
+      this.worldRoom.send(type, data);
+    }
+  }
+
+  private setupLobbyHandlers(): void {
+    if (!this.lobbyRoom) return;
+
+    this.lobbyRoom.onMessage('match_list', (data: { matches: MatchInfo[] }) => {
+      this.callbacks?.onMatchList(data.matches);
+    });
+
+    this.lobbyRoom.onMessage('match_created', (data: { matchId: string }) => {
+      this.callbacks?.onMatchCreated(data.matchId);
+    });
+
+    this.lobbyRoom.onMessage('match_joined', (data: { matchId: string }) => {
+      this.callbacks?.onMatchJoined(data.matchId);
+    });
+
+    this.lobbyRoom.onMessage('match_starting', (data: { matchId: string }) => {
+      this.callbacks?.onMatchStarting(data.matchId);
+    });
+
+    this.lobbyRoom.onMessage('error', (data: { message: string }) => {
+      console.error('Lobby error:', data.message);
+      this.callbacks?.onError(data.message);
+    });
+
+    this.lobbyRoom.onLeave(() => {
+      console.log('Left lobby');
+      if (this._state === 'lobby') {
+        this._state = 'disconnected';
+        this.lobbyRoom = null;
+        this.callbacks?.onDisconnected();
+      }
+    });
+  }
+
+  private setupWorldHandlers(): void {
+    if (!this.worldRoom) return;
+
+    this.worldRoom.onStateChange((state) => {
       this.stateSync.handleStateChange(state);
     });
 
-    this.room.onLeave(() => {
-      console.log('Disconnected from server');
-      this.scheduleReconnect(this.serverUrl);
+    this.worldRoom.onMessage('ping', () => {
+      // handled automatically
     });
 
-    this.room.onError((err) => {
-      console.error('Room error:', err);
+    this.worldRoom.onLeave(() => {
+      console.log('Left world room');
+      if (this._state === 'world') {
+        this._state = 'disconnected';
+        this.worldRoom = null;
+      }
+    });
+
+    this.worldRoom.onError((err) => {
+      console.error('World room error:', err);
     });
 
     setInterval(() => this.measureLatency(), 5000);
   }
 
   private async measureLatency(): Promise<void> {
-    if (!this.room) return;
+    if (!this.worldRoom) return;
     const start = Date.now();
     try {
-      await this.room.send('ping');
+      await this.worldRoom.send('ping');
       this.latency = Date.now() - start;
     } catch {
       this.latency = -1;
     }
   }
 
-  private scheduleReconnect(serverUrl: string): void {
+  private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) return;
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
-    setTimeout(() => this.connect(serverUrl), delay);
-  }
-
-  sendMessage(type: string, data: unknown): void {
-    if (this.room) {
-      this.room.send(type, data);
-    }
+    setTimeout(() => this.connectToLobby(this.serverUrl), delay);
   }
 
   getLatency(): number {
@@ -83,15 +204,10 @@ export class NetworkManager {
   }
 
   getSessionId(): string | null {
-    return this.room?.sessionId ?? null;
+    return this.worldRoom?.sessionId ?? this.lobbyRoom?.sessionId ?? null;
   }
 
   update(dt: number): void {
     this.stateSync.update(dt);
-  }
-
-  disconnect(): void {
-    this.room?.leave();
-    this.room = null;
   }
 }

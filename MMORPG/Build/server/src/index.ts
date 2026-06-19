@@ -17,8 +17,21 @@ import leaderboardRoutes from './api/LeaderboardRoutes.js';
 import adminRoutes from './api/AdminRoutes.js';
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
+
+// Handle preflight requests
+app.options('*', cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
@@ -35,11 +48,16 @@ const gameServer = new Server({
 });
 
 gameServer.define('lobby', LobbyRoom);
-gameServer.define('world', WorldRoom);
+gameServer.define('world', WorldRoom).filterBy(['matchId']);
 gameServer.define('chat', ChatRoom);
 
 server.listen(config.port, () => {
   logger.info(`FlyFF server started on port ${config.port}`);
   logger.info(`WebSocket: ws://localhost:${config.port}`);
   logger.info(`Monitor: http://localhost:${config.port}/colyseus`);
+});
+
+// Error handling
+server.on('error', (err: Error) => {
+  console.error('[Server Error]', err);
 });

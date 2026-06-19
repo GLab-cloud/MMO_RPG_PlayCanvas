@@ -10,6 +10,7 @@ export class InputController {
   private boundMouseMove: (e: MouseEvent) => void;
   private boundMouseDown: (e: MouseEvent) => void;
   private boundWheel: (e: WheelEvent) => void;
+  private enabled: boolean = true;
 
   constructor() {
     this.boundKeyDown = this.onKeyDown.bind(this);
@@ -19,22 +20,32 @@ export class InputController {
     this.boundWheel = this.onWheel.bind(this);
   }
 
-  get forward(): boolean { return this.keys.has(config.controls.forward); }
-  get backward(): boolean { return this.keys.has(config.controls.backward); }
-  get left(): boolean { return this.keys.has(config.controls.left); }
-  get right(): boolean { return this.keys.has(config.controls.right); }
-  get sprint(): boolean { return this.keys.has(config.controls.sprint); }
-  get jump(): boolean { return this.keys.has(config.controls.jump); }
-  get interact(): boolean { return this.keys.has(config.controls.interact); }
-  get mount(): boolean { return this.keys.has(config.controls.mount); }
-  get inventory(): boolean { return this.keys.has(config.controls.inventory); }
-  get character(): boolean { return this.keys.has(config.controls.character); }
-  get skills(): boolean { return this.keys.has(config.controls.skills); }
-  get quests(): boolean { return this.keys.has(config.controls.quests); }
-  get party(): boolean { return this.keys.has(config.controls.party); }
+  get forward(): boolean { return this.enabled && this.keys.has(config.controls.forward); }
+  get backward(): boolean { return this.enabled && this.keys.has(config.controls.backward); }
+  get left(): boolean { return this.enabled && this.keys.has(config.controls.left); }
+  get right(): boolean { return this.enabled && this.keys.has(config.controls.right); }
+  get sprint(): boolean { return this.enabled && this.keys.has(config.controls.sprint); }
+  get jump(): boolean { return this.enabled && this.keys.has(config.controls.jump); }
+  get interact(): boolean { return this.enabled && this.keys.has(config.controls.interact); }
+  get mount(): boolean { return this.enabled && this.keys.has(config.controls.mount); }
+  get inventory(): boolean { return this.enabled && this.keys.has(config.controls.inventory); }
+  get character(): boolean { return this.enabled && this.keys.has(config.controls.character); }
+  get skills(): boolean { return this.enabled && this.keys.has(config.controls.skills); }
+  get quests(): boolean { return this.enabled && this.keys.has(config.controls.quests); }
+  get party(): boolean { return this.enabled && this.keys.has(config.controls.party); }
 
   isSkillSlot(slot: number): boolean {
-    return slot >= 0 && slot <= 9 && this.keys.has(config.controls.skillBar[slot]);
+    return this.enabled && slot >= 0 && slot <= 9 && this.keys.has(config.controls.skillBar[slot]);
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (!enabled) {
+      this.keys.clear();
+      if (document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+    }
   }
 
   attach(): void {
@@ -54,6 +65,7 @@ export class InputController {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
+    if (!this.enabled) return;
     this.keys.add(e.code);
   }
 
@@ -62,17 +74,26 @@ export class InputController {
   }
 
   private onMouseMove(e: MouseEvent): void {
-    if (document.pointerLockElement) {
+    if (this.enabled && document.pointerLockElement) {
       this.mouseDeltaX += e.movementX;
       this.mouseDeltaY += e.movementY;
     }
   }
 
   private onMouseDown(_e: MouseEvent): void {
-    document.body.requestPointerLock();
+    // Don't request pointer lock if clicking on UI elements (buttons, inputs, etc.)
+    const target = _e.target as HTMLElement;
+    if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.closest('#lobby-ui'))) {
+      return;
+    }
+    
+    if (this.enabled) {
+      document.body.requestPointerLock();
+    }
   }
 
   private onWheel(e: WheelEvent): void {
+    if (!this.enabled) return;
     this.scrollDelta += Math.sign(e.deltaY);
   }
 

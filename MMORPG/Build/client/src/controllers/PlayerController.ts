@@ -131,7 +131,7 @@ export class PlayerController {
       const targetAngle = Math.atan2(velocity.x, velocity.z) * 180 / Math.PI;
       this.player.setLocalEulerAngles(0, targetAngle, 0);
 
-      this.network.sendMessage('move', {
+      this.network.sendToWorld('move', {
         x: pos.x, y: pos.y, z: pos.z,
         rotation: targetAngle,
       });

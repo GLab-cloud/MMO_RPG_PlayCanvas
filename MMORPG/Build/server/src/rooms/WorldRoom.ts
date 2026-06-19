@@ -1,5 +1,6 @@
 import colyseus from 'colyseus';
 const { Room } = colyseus;
+import type { Client } from 'colyseus';
 import { WorldStateSchema, PlayerState, MonsterState } from '../schema/WorldState.js';
 import { MovementHandler } from '../handlers/MovementHandler.js';
 import { CombatHandler } from '../handlers/CombatHandler.js';

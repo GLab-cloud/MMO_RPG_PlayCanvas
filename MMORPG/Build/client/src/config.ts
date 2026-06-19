@@ -1,6 +1,6 @@
 export const config = {
-  serverUrl: 'ws://kldzfq-2567.csb.app',
-  authUrl: 'http://kldzfq-2567.csb.app/api/auth',
+  serverUrl: 'wss://kldzfq-2567.csb.app',
+  authUrl: 'https://kldzfq-2567.csb.app/api/auth',
   camera: {
     defaultDistance: 15,
     defaultHeight: 8,

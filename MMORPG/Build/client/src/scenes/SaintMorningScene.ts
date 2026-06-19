@@ -58,6 +58,10 @@ export class SaintMorningScene {
     return this.root;
   }
 
+  update(_dt: number): void {
+    // Scene update logic (if needed)
+  }
+
   private createTerrain(): void {
     const terrain = new pc.Entity('terrain');
     terrain.addComponent('render', {

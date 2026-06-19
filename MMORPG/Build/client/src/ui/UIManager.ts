@@ -8,17 +8,22 @@ import { PartyPanel } from './panels/PartyPanel';
 import { QuestPanel } from './panels/QuestPanel';
 import { ShopPanel } from './panels/ShopPanel';
 import { TradePanel } from './panels/TradePanel';
-import { LobbyPanel } from './panels/LobbyPanel';
 import { DashboardPanel } from './panels/DashboardPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
+import { HTMLLobbyUI, HTMLLobbyCallbacks } from './HTMLLobbyUI';
+import { MatchInfo } from '../network/NetworkManager';
+import { InputController } from '../controllers/InputController';
 
-type PanelName = 'hud' | 'inventory' | 'character' | 'chat' | 'skills' | 'party' | 'quests' | 'shop' | 'trade' | 'lobby' | 'dashboard' | 'settings';
+type PanelName = 'hud' | 'inventory' | 'character' | 'chat' | 'skills' | 'party' | 'quests' | 'shop' | 'trade' | 'dashboard' | 'settings';
+
+export interface LobbyUICallbacks extends HTMLLobbyCallbacks {}
 
 export class UIManager {
   private app: pc.Application;
   private screen: pc.Entity;
   private panels: Map<PanelName, pc.Entity> = new Map();
-  private panelInstances: Record<string, unknown> = {};
+  private panelInstances: Record<string, any> = {};
+  private htmlLobby: HTMLLobbyUI;
 
   constructor(app: pc.Application) {
     this.app = app;
@@ -30,6 +35,8 @@ export class UIManager {
     });
     app.root.addChild(this.screen);
 
+    this.htmlLobby = new HTMLLobbyUI();
+
     this.registerPanel('hud', () => new HUDPanel(this.screen));
     this.registerPanel('inventory', () => new InventoryPanel(this.screen));
     this.registerPanel('character', () => new CharacterPanel(this.screen));
@@ -39,7 +46,6 @@ export class UIManager {
     this.registerPanel('quests', () => new QuestPanel(this.screen));
     this.registerPanel('shop', () => new ShopPanel(this.screen));
     this.registerPanel('trade', () => new TradePanel(this.screen));
-    this.registerPanel('lobby', () => new LobbyPanel(this.screen));
     this.registerPanel('dashboard', () => new DashboardPanel(this.screen));
     this.registerPanel('settings', () => new SettingsPanel(this.screen));
   }
@@ -54,6 +60,31 @@ export class UIManager {
   init(): void {
     this.showPanel('hud');
     this.showPanel('chat');
+  }
+
+  setInputController(inputController: InputController): void {
+    this.htmlLobby.setInputController(inputController);
+  }
+
+  showLobby(callbacks: LobbyUICallbacks): void {
+    this.hidePanel('hud');
+    this.hidePanel('chat');
+    this.htmlLobby.setCallbacks(callbacks);
+    this.htmlLobby.show();
+  }
+
+  showWorld(): void {
+    this.htmlLobby.hide();
+    this.showPanel('hud');
+    this.showPanel('chat');
+  }
+
+  updateMatchList(matches: MatchInfo[]): void {
+    this.htmlLobby.updateMatchList(matches);
+  }
+
+  setMyMatchId(id: string | null): void {
+    this.htmlLobby.setMyMatchId(id);
   }
 
   showPanel(name: PanelName): void {

@@ -1,5 +1,6 @@
 import colyseus from 'colyseus';
 const { Room } = colyseus;
+import type { Client } from 'colyseus';
 import { ChatHandler, ChatChannel } from '../handlers/ChatHandler.js';
 
 interface ChatState {

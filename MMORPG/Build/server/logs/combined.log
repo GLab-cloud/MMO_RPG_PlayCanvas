@@ -13,3 +13,39 @@
 {"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T13:17:30.685Z"}
 {"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T13:17:30.686Z"}
 {"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T13:17:30.686Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T13:45:12.758Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T13:45:12.759Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T13:45:12.759Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T13:49:56.542Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T13:49:56.544Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T13:49:56.544Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T14:48:06.890Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T14:48:06.892Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T14:48:06.892Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T14:58:03.336Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T14:58:03.337Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T14:58:03.337Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T15:01:16.027Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T15:01:16.029Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T15:01:16.029Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T15:06:18.673Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T15:06:18.675Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T15:06:18.675Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T15:07:29.979Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T15:07:29.980Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T15:07:29.981Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T15:10:24.600Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T15:10:24.601Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T15:10:24.601Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T15:12:43.964Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T15:12:43.966Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T15:12:43.966Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-18T15:18:18.400Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-18T15:18:18.402Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-18T15:18:18.402Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-19T00:16:58.552Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-19T00:16:58.557Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-19T00:16:58.558Z"}
+{"level":"info","message":"FlyFF server started on port 2567","service":"flyff-server","timestamp":"2026-06-19T00:17:11.011Z"}
+{"level":"info","message":"WebSocket: ws://localhost:2567","service":"flyff-server","timestamp":"2026-06-19T00:17:11.012Z"}
+{"level":"info","message":"Monitor: http://localhost:2567/colyseus","service":"flyff-server","timestamp":"2026-06-19T00:17:11.013Z"}
