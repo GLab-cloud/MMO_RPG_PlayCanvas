@@ -1,0 +1,7 @@
+
+> flyff-server@1.0.0 start
+> node dist/index.js
+
+[32minfo[39m: FlyFF server started on port 2567 {"service":"flyff-server","timestamp":"2026-06-19T01:23:12.196Z"}
+[32minfo[39m: WebSocket: ws://localhost:2567 {"service":"flyff-server","timestamp":"2026-06-19T01:23:12.199Z"}
+[32minfo[39m: Monitor: http://localhost:2567/colyseus {"service":"flyff-server","timestamp":"2026-06-19T01:23:12.199Z"}
