@@ -55,9 +55,18 @@ export class MonsterState extends Schema {
   @type('string') targetId: string = '';
 }
 
+export class WeaponState extends Schema {
+  @type('string') id: string = '';
+  @type('string') templateId: string = '';
+  @type('string') name: string = '';
+  @type('number') x: number = 0;
+  @type('number') z: number = 0;
+}
+
 export class WorldState extends Schema {
   @type({ map: PlayerState }) players: MapSchema<PlayerState> = new MapSchema();
   @type({ map: MonsterState }) monsters: MapSchema<MonsterState> = new MapSchema();
+  @type({ map: WeaponState }) weapons: MapSchema<WeaponState> = new MapSchema();
   @type('number') timeOfDay: number = 0;
   @type('string') weather: string = 'clear';
 }

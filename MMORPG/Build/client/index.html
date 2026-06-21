@@ -44,7 +44,8 @@
     </div>
 
     <div id="hud-bottom-center">
-      <div id="help-text">WASD: Move | Right-click: Lock mouse | Left-click: Attack</div>
+      <div id="help-text">WASD: Move | Right-click: Lock mouse | Left-click: Attack | I: Inventory</div>
+      <div id="weapon-pickup-hint" style="display:none;"></div>
     </div>
 
     <div id="hud-center">
@@ -54,7 +55,25 @@
   <div id="hud-damage-container"></div>
 </div>
 
+<div id="inventory-overlay" style="display:none;">
+  <div id="inventory-content">
+    <div id="inventory-header">
+      <h2>Inventory</h2>
+      <button id="inventory-close">&times;</button>
+    </div>
+    <div id="inventory-list"></div>
+  </div>
+</div>
+
 <div id="nameplates"></div>
+
+<div id="npc-dialog" style="display: none;">
+  <div id="npc-dialog-content">
+    <div id="npc-dialog-name"></div>
+    <div id="npc-dialog-text"></div>
+    <button id="npc-dialog-close">Close</button>
+  </div>
+</div>
 
   <div id="leaderboard" style="display: none;">
     <div id="leaderboard-header">

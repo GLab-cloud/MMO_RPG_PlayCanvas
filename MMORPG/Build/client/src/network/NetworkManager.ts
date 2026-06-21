@@ -29,11 +29,13 @@ export interface LobbyCallbacks {
 export interface CombatCallbacks {
   onDamageDealt(monsterId: string, damage: number, critical: boolean): void;
   onMonsterKilled(monsterId: string, xp: number): void;
-  onPlayerDamage(attackerId: string, damage: number, critical: boolean): void;
+  onPlayerDamage(attackerId: string, targetId: string, damage: number, critical: boolean): void;
   onScoreUpdate?(players: { id: string; name: string; kills: number; deaths: number; level: number }[]): void;
 }
 
 export class NetworkManager {
+  onWeaponPickup: ((data: { templateId: string; name: string; attack: number; magicAttack: number; critRate: number; playerId: string }) => void) | null = null;
+
   private client!: Client;
   private lobbyRoom: Room | null = null;
   private worldRoom: Room | null = null;
@@ -238,16 +240,22 @@ export class NetworkManager {
     });
 
     this.worldRoom.onMessage('combat:kill', (data: { monsterId: string; playerId: string; xp: number }) => {
-      this.stateSync.removeEntity(data.monsterId);
-      this.combatCallbacks?.onMonsterKilled(data.monsterId, data.xp);
+      this.stateSync.removeEntity(data.monsterId, false);
+      setTimeout(() => this.combatCallbacks?.onMonsterKilled(data.monsterId, data.xp), 400);
+    });
+
+    this.worldRoom.onMessage('combat:player_damage', (data: { targetId: string; attackerId: string; damage: number; critical: boolean }) => {
+      this.combatCallbacks?.onPlayerDamage(data.attackerId, data.targetId, data.damage, data.critical);
     });
 
     this.worldRoom.onMessage('pvp:damage', (data: { targetId: string; attackerId: string; damage: number; critical: boolean }) => {
-      this.combatCallbacks?.onPlayerDamage(data.attackerId, data.damage, data.critical);
+      this.combatCallbacks?.onPlayerDamage(data.attackerId, data.targetId, data.damage, data.critical);
     });
 
     this.worldRoom.onMessage('pvp:kill', (data: { targetId: string; attackerId: string }) => {
-      console.log(`PvP kill: ${data.attackerId} killed ${data.targetId}`);
+      if (data.targetId === this.stateSync.localPlayerId) {
+        this.combatCallbacks?.onPlayerDamage(data.attackerId, data.targetId, 9999, false);
+      }
     });
 
     this.worldRoom.onMessage('score:update', (data: { players: { id: string; name: string; kills: number; deaths: number; level: number }[] }) => {
@@ -268,6 +276,15 @@ export class NetworkManager {
 
     this.worldRoom.onMessage('monster:despawned', (data: { id: string }) => {
       this.stateSync.removeEntity(data.id);
+    });
+
+    this.worldRoom.onMessage('weapon:spawned', (data: any) => {
+      this.stateSync.addWeapon(data.id, data);
+    });
+
+    this.worldRoom.onMessage('weapon:picked_up', (data: { weaponId: string; playerId: string; templateId: string; name: string; attack: number; magicAttack: number; critRate: number }) => {
+      this.stateSync.removeEntity(data.weaponId, false);
+      this.onWeaponPickup?.({ templateId: data.templateId, name: data.name, attack: data.attack, magicAttack: data.magicAttack, critRate: data.critRate, playerId: data.playerId });
     });
 
     this.worldRoom.onLeave(() => {

@@ -13,7 +13,7 @@ export class CombatComponent {
     this.matk = 8;
     this.mdef = 4;
     this.critRate = 0.05;
-    this.attackRange = 2.5;
+    this.attackRange = 4;
   }
 
   canAttack(abilityId?: string): boolean {

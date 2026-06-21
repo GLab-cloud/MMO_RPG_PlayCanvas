@@ -148,6 +148,16 @@ canvas {
   bottom: 16px; left: 50%;
   transform: translateX(-50%);
 }
+#weapon-pickup-hint {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  color: #fbbf24;
+  text-shadow: 0 0 12px rgba(251,191,36,0.5);
+  background: rgba(0,0,0,0.5);
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(251,191,36,0.3);
+}
 #help-text {
   background: rgba(0,0,0,0.45);
   border: 1px solid rgba(255,255,255,0.08);
@@ -524,6 +534,30 @@ canvas {
 .leaderboard-kills { color: #4ade80; margin-left: 8px; }
 .leaderboard-deaths { color: #f87171; margin-left: 8px; }
 
+/* === NPC DIALOG === */
+#npc-dialog {
+  position: fixed; bottom: 5%; left: 50%; transform: translateX(-50%);
+  z-index: 60;
+  background: rgba(10,14,39,0.92);
+  border: 1px solid rgba(59,130,246,0.3);
+  border-radius: 14px;
+  padding: 16px 24px;
+  min-width: min(320px, 80vw);
+  max-width: 500px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: slideUp 0.3s ease;
+}
+@keyframes slideUp { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+#npc-dialog-name { font-size: 1.1rem; font-weight: 700; color: #93c5fd; margin-bottom: 8px; }
+#npc-dialog-text { font-size: 0.95rem; color: #e2e8f0; line-height: 1.5; margin-bottom: 12px; white-space: pre-wrap; }
+#npc-dialog-close {
+  background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3);
+  color: #93c5fd; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+  float: right; transition: all 0.2s;
+}
+#npc-dialog-close:hover { background: rgba(59,130,246,0.25); }
+
 /* === NAMEPLATES === */
 #nameplates {
   position: fixed; inset: 0; pointer-events: none; z-index: 40;
@@ -567,14 +601,59 @@ canvas {
   animation: fadeIn 0.5s ease;
 }
 #death-screen h1 {
-  font-size: clamp(2rem, 6vw, 4rem);
+  font-size: 1.4rem;
   color: #e74c3c;
-  text-shadow: 0 0 30px rgba(231,76,60,0.5);
-  margin: 0 0 1rem;
+  text-shadow: 0 0 20px rgba(231,76,60,0.4);
+  margin: 0 0 0.5rem;
 }
-#death-screen p { color: #94a3b8; font-size: 1.1rem; margin-bottom: 0.5rem; }
-#death-screen .btn { max-width: 200px; margin-top: 1.5rem; }
+#death-screen p { color: #94a3b8; font-size: 0.9rem; margin-bottom: 0.3rem; }
+#death-screen .btn { width: 140px; height: 32px; font-size: 0.85rem; margin-top: 0.8rem; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+#inventory-overlay {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease;
+}
+#inventory-content {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border: 1px solid rgba(148,163,184,0.3);
+  border-radius: 12px;
+  width: 400px; max-height: 70vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+#inventory-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid rgba(148,163,184,0.2);
+}
+#inventory-header h2 { margin: 0; font-size: 1.1rem; color: #e2e8f0; }
+#inventory-close {
+  background: none; border: none; color: #94a3b8; font-size: 1.4rem;
+  cursor: pointer; padding: 0 4px; line-height: 1;
+}
+#inventory-close:hover { color: #fff; }
+#inventory-list {
+  padding: 12px 16px; overflow-y: auto; flex: 1;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.inv-item {
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(30,41,59,0.6); border: 1px solid rgba(148,163,184,0.15);
+  border-radius: 8px; padding: 10px 12px;
+}
+.inv-item-icon {
+  width: 40px; height: 40px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; flex-shrink: 0;
+}
+.inv-item-info { flex: 1; }
+.inv-item-name { font-size: 0.95rem; font-weight: 600; color: #e2e8f0; }
+.inv-item-stats { display: flex; gap: 12px; margin-top: 4px; }
+.inv-item-stat { font-size: 0.8rem; color: #94a3b8; }
+.inv-item-stat span { color: #fbbf24; }
+.inv-empty { text-align: center; padding: 24px; color: #64748b; font-size: 0.9rem; }
 
 @media (max-width: 480px) {
   #hud-top-left { top: 6px; left: 6px; min-width: 160px; }

@@ -3,7 +3,7 @@ import { App } from './app';
 import { NetworkManager } from './network/NetworkManager';
 import { UIManager } from './ui/UIManager';
 import { SceneManager } from './scenes/SceneManager';
-import { PlayerController } from './controllers/PlayerController';
+import { PlayerController, NPC_DIALOGS, NPC_INTERACT_RANGE } from './controllers/PlayerController';
 import { CameraController } from './controllers/CameraController';
 import { InputController } from './controllers/InputController';
 import { NameplateUI } from './ui/NameplateUI';
@@ -19,6 +19,8 @@ export class GameClient {
   cameraController!: CameraController;
   inputController!: InputController;
   private nameplates!: NameplateUI;
+  private activeNpcDialog: string | null = null;
+  private lastNpcCheck: number = 0;
   running: boolean = false;
   private playerHp: number = 100;
   private playerMaxHp: number = 100;
@@ -32,6 +34,8 @@ export class GameClient {
   private kills: number = 0;
   private deaths: number = 0;
   private leaderboardData: { name: string; kills: number; deaths: number }[] = [];
+
+  private weaponsInventory: { templateId: string; name: string; attack: number; magicAttack: number; critRate: number }[] = [];
 
   async initialize(canvas: HTMLCanvasElement): Promise<void> {
     this.app = new App();
@@ -114,7 +118,16 @@ export class GameClient {
         }));
         this.ui.showLeaderboard(this.leaderboardData);
       },
-      onPlayerDamage: (attackerId, damage, critical) => {
+      onPlayerDamage: (attackerId, targetId, damage, critical) => {
+        const localId = this.network.getStateSync().localPlayerId;
+        if (targetId !== localId) {
+          this.ui.showDamageNumber(
+            window.innerWidth / 2 + (Math.random() - 0.5) * 60,
+            window.innerHeight / 2 + (Math.random() - 0.5) * 40,
+            damage, critical
+          );
+          return;
+        }
         this.playerHp -= damage;
         this.ui.showHitFlash();
         const x = window.innerWidth / 2 + (Math.random() - 0.5) * 40;
@@ -130,6 +143,17 @@ export class GameClient {
           this.ui.showDeathScreen();
         }
       },
+    });
+
+    document.getElementById('npc-dialog-close')?.addEventListener('click', () => {
+      this.activeNpcDialog = null;
+      const el = document.getElementById('npc-dialog');
+      if (el) el.style.display = 'none';
+    });
+
+    document.getElementById('inventory-close')?.addEventListener('click', () => {
+      const overlay = document.getElementById('inventory-overlay');
+      if (overlay) overlay.style.display = 'none';
     });
 
     this.pcApp.on('update', (dt: number) => {
@@ -196,8 +220,22 @@ export class GameClient {
       if (panel === 'leaderboard') {
         this.ui.toggleLeaderboard();
         this.updateLeaderboard();
+      } else if (panel === 'inventory') {
+        this.toggleInventory();
       }
     });
+    this.network.onWeaponPickup = (data) => {
+      const localId = this.network.getStateSync().localPlayerId;
+      if (data.playerId !== localId) return;
+      this.weaponsInventory.push({
+        templateId: data.templateId,
+        name: data.name,
+        attack: data.attack,
+        magicAttack: data.magicAttack,
+        critRate: data.critRate,
+      });
+    };
+
     this.sceneManager.loadScene('Flarine');
     this.nameplates.addNameplate('local', this.ui.getPlayerName(), true);
     await this.network.joinWorldRoom(matchId);
@@ -240,7 +278,87 @@ export class GameClient {
         this.playerAtk, this.playerDef
       );
 
+      this.updateNpcDialog();
+      this.updateWeaponPickupHint();
       this.updateNameplates();
+    }
+  }
+
+  private updateNpcDialog(): void {
+    this.lastNpcCheck += 1;
+    if (this.lastNpcCheck % 10 !== 0) return;
+    const dialogEl = document.getElementById('npc-dialog');
+    const nameEl = document.getElementById('npc-dialog-name');
+    const textEl = document.getElementById('npc-dialog-text');
+    if (!dialogEl || !nameEl || !textEl) return;
+
+    const nearestNpc = this.playerController.getNearestNPC();
+    if (nearestNpc) {
+      const messages = NPC_DIALOGS[nearestNpc];
+      if (messages) {
+        this.activeNpcDialog = nearestNpc;
+        nameEl.textContent = nearestNpc;
+        textEl.textContent = messages[Math.floor(Math.random() * messages.length)];
+        dialogEl.style.display = 'block';
+      }
+    } else if (this.activeNpcDialog) {
+      this.activeNpcDialog = null;
+      dialogEl.style.display = 'none';
+    }
+  }
+
+  private toggleInventory(): void {
+    const overlay = document.getElementById('inventory-overlay');
+    if (!overlay) return;
+    if (overlay.style.display === 'none') {
+      this.renderInventory();
+      overlay.style.display = 'flex';
+    } else {
+      overlay.style.display = 'none';
+    }
+  }
+
+  private renderInventory(): void {
+    const list = document.getElementById('inventory-list');
+    if (!list) return;
+    if (this.weaponsInventory.length === 0) {
+      list.innerHTML = '<div class="inv-empty">No weapons collected</div>';
+      return;
+    }
+    list.innerHTML = this.weaponsInventory.map((w, i) => {
+      const colors: Record<string, string> = {
+        sword: '#94a3b8', gun: '#64748b', axe: '#b91c1c',
+        staff: '#3b82f6', dagger: '#65a30d',
+      };
+      const icons: Record<string, string> = {
+        sword: '\u2694\uFE0F', gun: '\uD83D\uDD2B', axe: '\uD83E\uDE93',
+        staff: '\uD83E\uDE84', dagger: '\uD83D\uDDE1\uFE0F',
+      };
+      const color = colors[w.templateId] || '#94a3b8';
+      const icon = icons[w.templateId] || '\u2694\uFE0F';
+      let stats = `<div class="inv-item-stat">ATK <span>${w.attack}</span></div>`;
+      if (w.magicAttack > 0) stats += `<div class="inv-item-stat">MATK <span>${w.magicAttack}</span></div>`;
+      if (w.critRate > 0) stats += `<div class="inv-item-stat">CRIT <span>${(w.critRate * 100).toFixed(0)}%</span></div>`;
+      return `<div class="inv-item">
+        <div class="inv-item-icon" style="background:${color}22;color:${color}">${icon}</div>
+        <div class="inv-item-info">
+          <div class="inv-item-name">${w.name}</div>
+          <div class="inv-item-stats">${stats}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  private updateWeaponPickupHint(): void {
+    const hintEl = document.getElementById('weapon-pickup-hint');
+    if (!hintEl) return;
+    const weapon = this.playerController.getNearestWeapon();
+    if (weapon) {
+      const name = weapon.templateId.charAt(0).toUpperCase() + weapon.templateId.slice(1);
+      hintEl.textContent = `Press F to pick up ${name}`;
+      hintEl.style.display = 'block';
+    } else {
+      hintEl.style.display = 'none';
     }
   }
 

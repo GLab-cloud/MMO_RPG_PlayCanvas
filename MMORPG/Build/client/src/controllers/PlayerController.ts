@@ -8,6 +8,22 @@ import { MountEntity } from '../entities/MountEntity';
 import { StateSync } from '../network/StateSync';
 import { config } from '../config';
 
+const COLLISION_RADIUS = 1.0;
+const NPC_INTERACT_RANGE = 4.0;
+
+const NPC_DIALOGS: Record<string, string[]> = {
+  'Weapon Merchant': ['Welcome! Check out my fine weapons.', 'A sharp blade is a warrior\'s best friend.'],
+  'Armor Merchant': ['Need protection? I have the best armor in town.', 'Defense is just as important as attack!'],
+  'Magic Merchant': ['Harness the power of magic!', 'Spells can turn the tide of any battle.'],
+  'Storage Keeper': ['Store your items here safely.', 'Never know what you might find on your travels.'],
+  'Quest Guide': ['Find and defeat monsters to gain XP, level up, and earn rewards!', 'Stay alive — HP matters. Use potions to heal!'],
+  'Skill Master': ['Learn new abilities to become stronger.', 'Master your skills to defeat tougher foes.'],
+  'Class Master': ['Choose your class wisely.', 'Each class has unique strengths.'],
+  'Transport NPC': ['Travel to other towns from here.', 'The world is vast — explore every corner!'],
+  'Banker': ['Keep your gold safe with me.', 'A wise adventurer saves for the future.'],
+  'Guard NPC': ['Stay alert — monsters lurk nearby.', 'Don\'t wander too far alone!'],
+};
+
 export class PlayerController {
   private app: pc.Application;
   private network: NetworkManager;
@@ -91,19 +107,19 @@ export class PlayerController {
     return this.player;
   }
 
-  getNearestTarget(attackRange: number): string | null {
+  getNearestTarget(attackRange: number): { id: string; type: string } | null {
     const pos = this.player.getLocalPosition();
-    let nearest: string | null = null;
+    let nearest: { id: string; type: string } | null = null;
     let nearestDist = attackRange;
 
-    const players = this.stateSync.getAllPlayerPositions();
-    for (const p of players) {
-      const dx = p.x - pos.x;
-      const dz = p.z - pos.z;
+    const entities = this.stateSync.getAllEntityPositions();
+    for (const e of entities) {
+      const dx = e.x - pos.x;
+      const dz = e.z - pos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
       if (dist < nearestDist) {
         nearestDist = dist;
-        nearest = p.id;
+        nearest = { id: e.id, type: e.type };
       }
     }
     return nearest;
@@ -113,9 +129,13 @@ export class PlayerController {
     if (this.isDead) return;
     if (!this.combat.canAttack()) return;
 
-    const targetId = this.getNearestTarget(this.combat.attackRange);
-    if (targetId) {
-      this.network.sendPlayerAttack(targetId);
+    const target = this.getNearestTarget(this.combat.attackRange);
+    if (target) {
+      if (target.type === 'monster') {
+        this.network.sendToWorld('player:action', { type: 'attack', targetId: target.id });
+      } else {
+        this.network.sendPlayerAttack(target.id);
+      }
       this.combat.attack();
       this.attackAnimTime = 0.3;
     }
@@ -132,6 +152,69 @@ export class PlayerController {
     this.player.setLocalPosition(0, 2, 0);
   }
 
+  private checkCollision(x: number, z: number): boolean {
+    const entities = this.stateSync.getAllEntityPositions();
+    for (const e of entities) {
+      const dx = e.x - x;
+      const dz = e.z - z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < COLLISION_RADIUS) return true;
+    }
+    return false;
+  }
+
+  private npcPositions: { name: string; x: number; z: number }[] = [
+    { name: 'Weapon Merchant', x: 25, z: -6 },
+    { name: 'Armor Merchant', x: -22, z: -8 },
+    { name: 'Magic Merchant', x: 30, z: 12 },
+    { name: 'Storage Keeper', x: -28, z: 14 },
+    { name: 'Quest Guide', x: 5, z: 26 },
+    { name: 'Skill Master', x: 18, z: -18 },
+    { name: 'Class Master', x: -5, z: -25 },
+    { name: 'Transport NPC', x: 35, z: -5 },
+    { name: 'Banker', x: -30, z: -11 },
+  ];
+
+  getNearestNPC(): string | null {
+    const pos = this.player.getLocalPosition();
+    let nearest: string | null = null;
+    let nearestDist = NPC_INTERACT_RANGE;
+    for (const npc of this.npcPositions) {
+      const dx = npc.x - pos.x;
+      const dz = npc.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < nearestDist && NPC_DIALOGS[npc.name]) {
+        nearestDist = dist;
+        nearest = npc.name;
+      }
+    }
+    return nearest;
+  }
+
+  getNearestWeapon(): { id: string; templateId: string; x: number; z: number } | null {
+    const pos = this.player.getLocalPosition();
+    const weapons = this.stateSync.getWeaponPositions();
+    let nearest: { id: string; templateId: string; x: number; z: number } | null = null;
+    let nearestDist = 1.8;
+    for (const w of weapons) {
+      const dx = w.x - pos.x;
+      const dz = w.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = w;
+      }
+    }
+    return nearest;
+  }
+
+  private pickupNearestWeapon(): void {
+    const weapon = this.getNearestWeapon();
+    if (weapon) {
+      this.network.sendToWorld('player:action', { type: 'pickup_weapon', targetId: weapon.id });
+    }
+  }
+
   update(dt: number): void {
     if (this.isDead) {
       this.mount.update(dt);
@@ -145,29 +228,36 @@ export class PlayerController {
 
     const forward = this.camera.getForward();
     const right = this.camera.getRight();
-    const velocity = new pc.Vec3(0, 0, 0);
+    let moveX = 0, moveZ = 0;
 
-    if (this.input.forward) {
-      velocity.x += forward.x; velocity.z += forward.z;
-    }
-    if (this.input.backward) {
-      velocity.x -= forward.x; velocity.z -= forward.z;
-    }
-    if (this.input.left) {
-      velocity.x -= right.x; velocity.z -= right.z;
-    }
-    if (this.input.right) {
-      velocity.x += right.x; velocity.z += right.z;
-    }
+    if (this.input.forward) { moveX += forward.x; moveZ += forward.z; }
+    if (this.input.backward) { moveX -= forward.x; moveZ -= forward.z; }
+    if (this.input.left) { moveX -= right.x; moveZ -= right.z; }
+    if (this.input.right) { moveX += right.x; moveZ += right.z; }
 
-    if (velocity.length() > 0) {
-      velocity.normalize();
+    if (moveX !== 0 || moveZ !== 0) {
+      const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
+      moveX /= len; moveZ /= len;
       const speed = this.input.sprint ? this.moveSpeed * this.sprintMultiplier : this.moveSpeed;
-      velocity.mulScalar(speed * dt);
-      pos.x += velocity.x;
-      pos.z += velocity.z;
+      const newX = pos.x + moveX * speed * dt;
+      const newZ = pos.z + moveZ * speed * dt;
+      if (!this.checkCollision(newX, newZ)) {
+        pos.x = newX;
+        pos.z = newZ;
+      } else {
+        let slidX = pos.x + moveX * speed * dt;
+        let slidZ = pos.z;
+        if (!this.checkCollision(slidX, slidZ)) {
+          pos.x = slidX;
+        }
+        slidX = pos.x;
+        slidZ = pos.z + moveZ * speed * dt;
+        if (!this.checkCollision(slidX, slidZ)) {
+          pos.z = slidZ;
+        }
+      }
       this.player.setLocalPosition(pos);
-      const targetAngle = Math.atan2(velocity.x, velocity.z) * 180 / Math.PI;
+      const targetAngle = Math.atan2(moveX, moveZ) * 180 / Math.PI;
       this.player.setLocalEulerAngles(0, targetAngle, 0);
       this.network.sendToWorld('player:move', { x: pos.x, z: pos.z, rotation: targetAngle });
     }
@@ -179,6 +269,10 @@ export class PlayerController {
     if (this.input.party) { this.input.keys.delete('KeyP'); this.onPanelToggle?.('leaderboard'); }
     if (this.input.mount) { this.input.keys.delete('KeyR'); this.network.sendToWorld('mount:mount', { mountId: 'broom' }); }
     if (this.input.jump) { this.input.keys.delete('Space'); pos.y = 3.5; }
+    if (this.input.interact) {
+      this.input.keys.delete(config.controls.interact);
+      this.pickupNearestWeapon();
+    }
 
     this.player.setLocalPosition(pos);
     this.mount.update(dt);
@@ -207,3 +301,5 @@ export class PlayerController {
     }
   }
 }
+
+export { NPC_DIALOGS, NPC_INTERACT_RANGE };

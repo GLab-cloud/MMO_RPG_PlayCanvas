@@ -1,7 +1,7 @@
 import colyseus from 'colyseus';
 const { Room } = colyseus;
 import type { Client } from 'colyseus';
-import { WorldState, PlayerState, MonsterState } from '../schema/WorldState.js';
+import { WorldState, PlayerState, MonsterState, WeaponState } from '../schema/WorldState.js';
 import { MovementHandler } from '../handlers/MovementHandler.js';
 import { CombatHandler } from '../handlers/CombatHandler.js';
 import { InventoryHandler, Item } from '../handlers/InventoryHandler.js';
@@ -15,6 +15,7 @@ import { MountHandler } from '../handlers/MountHandler.js';
 import { TradeHandler } from '../handlers/TradeHandler.js';
 import { GuildHandler } from '../handlers/GuildHandler.js';
 import { AISystem } from '../systems/AISystem.js';
+import { MonsterState as MonsterAIState } from '../systems/AISystem.js';
 import { SpawnSystem } from '../systems/SpawnSystem.js';
 import { EnvironmentSystem } from '../systems/EnvironmentSystem.js';
 import { BuffSystem } from '../systems/BuffSystem.js';
@@ -35,6 +36,14 @@ const MONSTER_TEMPLATES: Record<string, any> = {
   skeleton: { name: 'Skeleton', level: 7, hp: 100, maxHp: 100, attack: 14, defense: 6, magicAttack: 0, magicDefense: 10, speed: 2.5, aggroRange: 10, attackRange: 1.5, xpReward: 55 },
   zombie: { name: 'Zombie', level: 6, hp: 120, maxHp: 120, attack: 10, defense: 7, magicAttack: 0, magicDefense: 3, speed: 1.5, aggroRange: 6, attackRange: 1.5, xpReward: 45 },
   ghost: { name: 'Ghost', level: 12, hp: 100, maxHp: 100, attack: 18, defense: 5, magicAttack: 20, magicDefense: 15, speed: 4, aggroRange: 14, attackRange: 3, xpReward: 130 },
+};
+
+const WEAPON_TEMPLATES: Record<string, any> = {
+  sword: { name: 'Iron Sword', attack: 5 },
+  gun: { name: 'Pistol', attack: 6 },
+  axe: { name: 'Battle Axe', attack: 7 },
+  staff: { name: 'Wooden Staff', magicAttack: 5 },
+  dagger: { name: 'Iron Dagger', attack: 4, critRate: 0.03 },
 };
 
 export class WorldRoom extends Room<WorldState> {
@@ -68,6 +77,8 @@ export class WorldRoom extends Room<WorldState> {
   private playerMounts: Map<string, string | null> = new Map();
   private activeTrades: Map<string, string> = new Map();
 
+  private spawnedWeapons: Map<string, { id: string; templateId: string; picked: boolean }> = new Map();
+
   onCreate(_options: any): void {
     this.setState(new WorldState());
 
@@ -92,6 +103,7 @@ export class WorldRoom extends Room<WorldState> {
 
     this.spawnSystem.initialize(50);
     this.initializeMonsters();
+    this.spawnInitialWeapons();
 
     this.registerMessageHandlers();
     this.startGameLoop();
@@ -126,6 +138,36 @@ export class WorldRoom extends Room<WorldState> {
     monster.xpReward = template.xpReward || 15;
     this.state.monsters.set(id, monster);
     this.broadcast('monster:spawned', { id, templateId, name: monster.name, x, z, hp: monster.hp, maxHp: monster.maxHp, level: monster.level });
+    return id;
+  }
+
+  private spawnInitialWeapons(): void {
+    const templates = Object.keys(WEAPON_TEMPLATES);
+    for (const sessionId of this.state.players.keys()) {
+      const player = this.state.players.get(sessionId);
+      if (!player) continue;
+      for (let i = 0; i < 3; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 3 + Math.random() * 5;
+        const templateId = templates[Math.floor(Math.random() * templates.length)];
+        if (templateId) this.spawnWeapon(templateId, player.x + Math.cos(angle) * dist, player.z + Math.sin(angle) * dist);
+      }
+    }
+  }
+
+  private spawnWeapon(templateId: string, x: number, z: number): string {
+    const template = WEAPON_TEMPLATES[templateId];
+    if (!template) return '';
+    const id = generateId();
+    const weapon = new WeaponState();
+    weapon.id = id;
+    weapon.templateId = templateId;
+    weapon.name = template.name;
+    weapon.x = x;
+    weapon.z = z;
+    this.state.weapons.set(id, weapon);
+    this.spawnedWeapons.set(id, { id, templateId, picked: false });
+    this.broadcast('weapon:spawned', { id, templateId, name: weapon.name, x: weapon.x, z: weapon.z });
     return id;
   }
 
@@ -234,6 +276,25 @@ export class WorldRoom extends Room<WorldState> {
           }
         }
         this.broadcast('skill:used', { playerId: player.id, skillId: data.skillId });
+      } else if (data.type === 'pickup_weapon' && data.targetId) {
+        const weapon = this.state.weapons.get(data.targetId);
+        if (!weapon) {
+          client.send('weapon:error', { error: 'Weapon not found' });
+          return;
+        }
+        const dx = player.x - weapon.x;
+        const dz = player.z - weapon.z;
+        if (Math.sqrt(dx * dx + dz * dz) > 2.5) {
+          client.send('weapon:error', { error: 'Too far' });
+          return;
+        }
+        this.state.weapons.delete(data.targetId);
+        this.spawnedWeapons.delete(data.targetId);
+        const template = WEAPON_TEMPLATES[weapon.templateId];
+        this.broadcast('weapon:picked_up', {
+          weaponId: data.targetId, playerId: player.id, templateId: weapon.templateId, name: weapon.name,
+          attack: template?.attack || 0, magicAttack: template?.magicAttack || 0, critRate: template?.critRate || 0,
+        });
       }
     });
 
@@ -530,6 +591,28 @@ export class WorldRoom extends Room<WorldState> {
       }
     }
 
+    for (const [id, aiM] of aiMonsters) {
+      if (aiM.state === MonsterAIState.Attack && aiM.targetId && this.monsterAttackCooldown(id, dt)) {
+        const targetPlayer = this.state.players.get(aiM.targetId);
+        if (targetPlayer) {
+          const rawDamage = aiM.level * 2 + Math.random() * 5 - targetPlayer.defense * 0.3;
+          const damage = Math.max(1, Math.floor(rawDamage));
+          targetPlayer.hp -= damage;
+          this.broadcast('combat:player_damage', { targetId: aiM.targetId, attackerId: id, damage, critical: false });
+          if (targetPlayer.hp <= 0) {
+            targetPlayer.hp = targetPlayer.maxHp;
+            this.monsterAttackTimers.set(id, 3.0);
+            const monster = this.state.monsters.get(id);
+            if (monster) {
+              monster.state = MonsterAIState.Idle;
+              monster.targetId = '';
+            }
+            this.broadcast('pvp:kill', { targetId: aiM.targetId, attackerId: id });
+          }
+        }
+      }
+    }
+
     this.spawnSystem.update(dt, this.state.monsters, (templateId, x, z) => this.spawnMonster(templateId, x, z));
 
     const despawnedLoot = this.lootHandler.update(dt);
@@ -540,6 +623,18 @@ export class WorldRoom extends Room<WorldState> {
     for (const [sessionId] of this.state.players) {
       this.buffSystem.tick(sessionId, dt);
     }
+  }
+
+  private monsterAttackTimers: Map<string, number> = new Map();
+  private monsterAttackCooldown(id: string, dt: number): boolean {
+    const timer = this.monsterAttackTimers.get(id) || 0;
+    const newTimer = timer - dt;
+    if (newTimer <= 0) {
+      this.monsterAttackTimers.set(id, 2.0);
+      return true;
+    }
+    this.monsterAttackTimers.set(id, newTimer);
+    return false;
   }
 
   private spawnCounter: number = 0;
@@ -562,6 +657,14 @@ export class WorldRoom extends Room<WorldState> {
     this.playerInventories.set(client.sessionId, []);
     this.playerMounts.set(client.sessionId, null);
 
+    const templates = Object.keys(WEAPON_TEMPLATES);
+    for (let i = 0; i < 3; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 3 + Math.random() * 5;
+      const templateId = templates[Math.floor(Math.random() * templates.length)];
+      if (templateId) this.spawnWeapon(templateId, player.x + Math.cos(angle) * dist, player.z + Math.sin(angle) * dist);
+    }
+
     client.send('world:joined', {
       playerId: player.id,
       sessionId: client.sessionId,
@@ -572,6 +675,7 @@ export class WorldRoom extends Room<WorldState> {
     client.send('world:state', {
       players: Array.from(this.state.players.values()).map((p: PlayerState) => ({ id: p.id, name: p.name, x: p.x, z: p.z, level: p.level, rotation: p.rotation })),
       monsters: Array.from(this.state.monsters.values()).map((m: MonsterState) => ({ id: m.id, name: m.name, x: m.x, z: m.z, hp: m.hp, maxHp: m.maxHp, level: m.level })),
+      weapons: Array.from(this.state.weapons.values()).map((w: WeaponState) => ({ id: w.id, templateId: w.templateId, name: w.name, x: w.x, z: w.z })),
       timeOfDay: this.state.timeOfDay,
       weather: this.state.weather,
     });
