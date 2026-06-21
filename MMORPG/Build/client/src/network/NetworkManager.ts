@@ -26,6 +26,13 @@ export interface LobbyCallbacks {
   onDisconnected(): void;
 }
 
+export interface CombatCallbacks {
+  onDamageDealt(monsterId: string, damage: number, critical: boolean): void;
+  onMonsterKilled(monsterId: string, xp: number): void;
+  onPlayerDamage(attackerId: string, damage: number, critical: boolean): void;
+  onScoreUpdate?(players: { id: string; name: string; kills: number; deaths: number; level: number }[]): void;
+}
+
 export class NetworkManager {
   private client!: Client;
   private lobbyRoom: Room | null = null;
@@ -39,6 +46,9 @@ export class NetworkManager {
   private serverUrl: string = '';
   private _state: ClientState = 'disconnected';
   private callbacks: LobbyCallbacks | null = null;
+  private combatCallbacks: CombatCallbacks | null = null;
+  private _localPlayerId: string = '';
+  private onPlayerLeftCallback: ((id: string) => void) | null = null;
 
   constructor(pcApp: pc.Application, sceneManager: SceneManager) {
     this.pcApp = pcApp;
@@ -50,8 +60,24 @@ export class NetworkManager {
     this.callbacks = cb;
   }
 
+  setCombatCallbacks(cb: CombatCallbacks): void {
+    this.combatCallbacks = cb;
+  }
+
+  setOnPlayerLeft(cb: (id: string) => void): void {
+    this.onPlayerLeftCallback = cb;
+  }
+
   get state(): ClientState {
     return this._state;
+  }
+
+  get localPlayerId(): string {
+    return this._localPlayerId;
+  }
+
+  getStateSync(): StateSync {
+    return this.stateSync;
   }
 
   async connectToLobby(serverUrl: string): Promise<void> {
@@ -79,7 +105,6 @@ export class NetworkManager {
     }
 
     try {
-      // Use joinOrCreate to automatically create world room instance on first join
       this.worldRoom = await this.client.joinOrCreate('world', { matchId });
       this.setupWorldHandlers();
       this._state = 'world';
@@ -121,6 +146,18 @@ export class NetworkManager {
     }
   }
 
+  sendAttack(targetId: string, skillId?: string): void {
+    this.sendToWorld('player:action', {
+      type: skillId ? 'skill' : 'attack',
+      targetId,
+      skillId,
+    });
+  }
+
+  sendPlayerAttack(targetId: string): void {
+    this.sendToWorld('player:pvp_attack', { targetId });
+  }
+
   private setupLobbyHandlers(): void {
     if (!this.lobbyRoom) return;
 
@@ -158,30 +195,79 @@ export class NetworkManager {
   private setupWorldHandlers(): void {
     if (!this.worldRoom) return;
 
-    this.stateSync.setLocalSessionId(this.worldRoom.sessionId);
-
     this.worldRoom.onStateChange((state) => {
-      this.stateSync.handleStateChange(state);
-    });
+      const monsters = Array.from((state as any).monsters?.values() || []).map((m: any) => ({
+        id: m.id, name: m.name, x: m.x, z: m.z, hp: m.hp, maxHp: m.maxHp, level: m.level,
+      }));
+      this.stateSync.syncMonsterState(monsters);
 
-    this.worldRoom.onMessage('ping', () => {
-      // handled automatically
-    });
-
-    this.worldRoom.onMessage('pong', () => {
-      // latency response - handled by send callback
+      for (const p of (state as any).players?.values() || []) {
+        this.stateSync.onPlayerHPUpdate?.(p.id, p.hp, p.maxHp);
+      }
     });
 
     this.worldRoom.onMessage('world:joined', (data: { playerId: string; sessionId: string; x: number; z: number }) => {
-      console.log(`Spawned at (${data.x}, ${data.z})`);
+      this._localPlayerId = data.playerId;
+      this.stateSync.setLocalPlayerId(data.playerId);
+      console.log(`Spawned at (${data.x}, ${data.z}) with localPlayerId=${data.playerId}`);
+    });
+
+    this.worldRoom.onMessage('world:state', (data: { players: any[]; monsters: any[] }) => {
+      this.stateSync.handleInitialState(data);
     });
 
     this.worldRoom.onMessage('player:joined', (data: { id: string; name: string; x: number; z: number }) => {
-      console.log(`Player joined: ${data.name} (${data.id}) at (${data.x}, ${data.z})`);
+      this.stateSync.addPlayer(data.id, data);
+    });
+
+    this.worldRoom.onMessage('player:renamed', (data: { id: string; name: string }) => {
+      this.stateSync.onPlayerRenamed?.(data.id, data.name);
     });
 
     this.worldRoom.onMessage('player:left', (data: { id: string; name: string }) => {
-      console.log(`Player left: ${data.name} (${data.id})`);
+      this.stateSync.removeEntity(data.id);
+      this.onPlayerLeftCallback?.(data.id);
+    });
+
+    this.worldRoom.onMessage('player:moved', (data: { id: string; x: number; z: number; rotation: number }) => {
+      this.stateSync.updatePosition(data.id, data.x, data.z, data.rotation);
+    });
+
+    this.worldRoom.onMessage('combat:damage', (data: { monsterId: string; playerId: string; damage: number; critical: boolean }) => {
+      this.combatCallbacks?.onDamageDealt(data.monsterId, data.damage, data.critical);
+    });
+
+    this.worldRoom.onMessage('combat:kill', (data: { monsterId: string; playerId: string; xp: number }) => {
+      this.stateSync.removeEntity(data.monsterId);
+      this.combatCallbacks?.onMonsterKilled(data.monsterId, data.xp);
+    });
+
+    this.worldRoom.onMessage('pvp:damage', (data: { targetId: string; attackerId: string; damage: number; critical: boolean }) => {
+      this.combatCallbacks?.onPlayerDamage(data.attackerId, data.damage, data.critical);
+    });
+
+    this.worldRoom.onMessage('pvp:kill', (data: { targetId: string; attackerId: string }) => {
+      console.log(`PvP kill: ${data.attackerId} killed ${data.targetId}`);
+    });
+
+    this.worldRoom.onMessage('score:update', (data: { players: { id: string; name: string; kills: number; deaths: number; level: number }[] }) => {
+      this.combatCallbacks?.onScoreUpdate?.(data.players);
+    });
+
+    this.worldRoom.onMessage('loot:spawned', (data: { id: string; x: number; z: number }) => {
+      console.log('Loot spawned:', data);
+    });
+
+    this.worldRoom.onMessage('loot:despawned', (data: { lootId: string }) => {
+      console.log('Loot despawned:', data);
+    });
+
+    this.worldRoom.onMessage('monster:spawned', (data: any) => {
+      this.stateSync.addMonster(data.id, data);
+    });
+
+    this.worldRoom.onMessage('monster:despawned', (data: { id: string }) => {
+      this.stateSync.removeEntity(data.id);
     });
 
     this.worldRoom.onLeave(() => {

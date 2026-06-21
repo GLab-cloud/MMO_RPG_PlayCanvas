@@ -2,8 +2,8 @@ import { MatchInfo } from '../network/NetworkManager';
 import { InputController } from '../controllers/InputController';
 
 export interface HTMLLobbyCallbacks {
-  onCreateMatch(name: string, map: string, maxPlayers: number): void;
-  onJoinMatch(matchId: string): void;
+  onCreateMatch(name: string, map: string, maxPlayers: number, playerName: string): void;
+  onJoinMatch(matchId: string, playerName: string): void;
   onLeaveMatch(matchId: string): void;
   onStartMatch(matchId: string): void;
   onExitGame(): void;
@@ -30,6 +30,11 @@ export class HTMLLobbyUI {
     this.inputController = inputController;
   }
 
+  getPlayerName(): string {
+    const input = document.getElementById('lobby-player-name') as HTMLInputElement;
+    return input?.value?.trim() || 'Player';
+  }
+
   show(): void {
     if (!this.container) return;
     this.isVisible = true;
@@ -46,20 +51,15 @@ export class HTMLLobbyUI {
   }
 
   setMyMatchId(id: string | null): void {
-    console.log(`[HTMLLobbyUI] setMyMatchId: ${this.myMatchId} → ${id}`);
     this.myMatchId = id;
     if (this.isVisible) {
-      console.log(`[HTMLLobbyUI] Lobby visible, re-rendering match list`);
       this.renderMatchList();
     }
   }
 
   updateMatchList(matches: MatchInfo[]): void {
-    console.log(`[HTMLLobbyUI] updateMatchList: received ${matches.length} matches, myMatchId=${this.myMatchId}`);
-    matches.forEach(m => console.log(`  - ${m.id}: ${m.name} (${m.playerCount}/${m.maxPlayers}) joined=${this.myMatchId === m.id}`));
     this.matches = matches;
     if (this.isVisible) {
-      console.log(`[HTMLLobbyUI] Rendering match list`);
       this.renderMatchList();
     }
   }
@@ -71,6 +71,10 @@ export class HTMLLobbyUI {
         <div class="lobby-header">
           <h1>FLYFF</h1>
           <p>Fly For Fun Online Game Lobby</p>
+        </div>
+        <div class="lobby-name-row">
+          <label for="lobby-player-name">Player Name</label>
+          <input type="text" id="lobby-player-name" maxlength="16" placeholder="Enter your name..." value="Player" />
         </div>
         <div class="lobby-main">
           <div class="lobby-panel">
@@ -102,7 +106,7 @@ export class HTMLLobbyUI {
                 </select>
               </div>
               <div class="button-group">
-                <button type="submit" class="btn btn-success">✨ Create Match</button>
+                <button type="submit" class="btn btn-success">Create Match</button>
                 <button type="button" class="btn btn-danger" id="exit-btn">Exit Game</button>
               </div>
             </form>
@@ -125,7 +129,8 @@ export class HTMLLobbyUI {
         const name = (document.getElementById('match-name') as HTMLInputElement).value || 'My Match';
         const map = (document.getElementById('map-select') as HTMLSelectElement).value || 'Flarine';
         const maxPlayers = parseInt((document.getElementById('max-players') as HTMLSelectElement).value) || 4;
-        this.callbacks?.onCreateMatch(name, map, maxPlayers);
+        const playerName = this.getPlayerName();
+        this.callbacks?.onCreateMatch(name, map, maxPlayers, playerName);
       });
     }
 
@@ -170,8 +175,6 @@ export class HTMLLobbyUI {
     const isJoined = this.myMatchId === match.id;
     const playerStatus = `${match.playerCount}/${match.maxPlayers}`;
 
-    console.log(`[Match ${match.id}] myMatchId=${this.myMatchId}, isJoined=${isJoined}, playerCount=${match.playerCount}/${match.maxPlayers}`);
-
     let actionHTML = '';
     if (isJoined) {
       actionHTML = `
@@ -211,23 +214,19 @@ export class HTMLLobbyUI {
 
   private attachMatchEntryListeners(entryEl: HTMLElement, match: MatchInfo): void {
     const buttons = entryEl.querySelectorAll('.action-btn') as NodeListOf<HTMLButtonElement>;
-    console.log(`[Match ${match.id}] Attaching listeners to ${buttons.length} buttons`);
-    
+
     buttons.forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const action = btn.dataset.action;
-        console.log(`[Match ${match.id}] Button clicked: ${action}`);
-        
+
         if (action === 'join') {
-          console.log(`Joining match ${match.id}`);
-          this.callbacks?.onJoinMatch(match.id);
+          const playerName = this.getPlayerName();
+          this.callbacks?.onJoinMatch(match.id, playerName);
         } else if (action === 'leave') {
-          console.log(`Leaving match ${match.id}`);
           this.callbacks?.onLeaveMatch(match.id);
         } else if (action === 'start') {
-          console.log(`Starting match ${match.id}`);
           this.callbacks?.onStartMatch(match.id);
         }
       });

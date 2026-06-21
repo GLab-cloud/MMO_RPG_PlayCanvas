@@ -30,6 +30,8 @@ export class PlayerState extends Schema {
   @type('string') partyId: string = '';
   @type('string') guildId: string = '';
   @type('boolean') connected: boolean = true;
+  @type('number') kills: number = 0;
+  @type('number') deaths: number = 0;
 }
 
 export class MonsterState extends Schema {

@@ -5,12 +5,14 @@ export class InputController {
   mouseDeltaX: number = 0;
   mouseDeltaY: number = 0;
   scrollDelta: number = 0;
+  attackClicked: boolean = false;
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
   private boundMouseMove: (e: MouseEvent) => void;
   private boundMouseDown: (e: MouseEvent) => void;
   private boundWheel: (e: WheelEvent) => void;
   private enabled: boolean = true;
+  private callbackAttack: (() => void) | null = null;
 
   constructor() {
     this.boundKeyDown = this.onKeyDown.bind(this);
@@ -36,6 +38,10 @@ export class InputController {
 
   isSkillSlot(slot: number): boolean {
     return this.enabled && slot >= 0 && slot <= 9 && this.keys.has(config.controls.skillBar[slot]);
+  }
+
+  setAttackCallback(cb: () => void): void {
+    this.callbackAttack = cb;
   }
 
   setEnabled(enabled: boolean): void {
@@ -65,8 +71,11 @@ export class InputController {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
+    const target = e.target as HTMLElement;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
     if (!this.enabled) return;
     this.keys.add(e.code);
+    e.preventDefault();
   }
 
   private onKeyUp(e: KeyboardEvent): void {
@@ -81,14 +90,24 @@ export class InputController {
   }
 
   private onMouseDown(_e: MouseEvent): void {
-    // Don't request pointer lock if clicking on UI elements (buttons, inputs, etc.)
     const target = _e.target as HTMLElement;
     if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.closest('#lobby-ui'))) {
       return;
     }
-    
-    if (this.enabled) {
-      document.body.requestPointerLock();
+    if (!this.enabled) return;
+
+    if (_e.button === 2) {
+      if (!document.pointerLockElement) {
+        document.body.requestPointerLock();
+      } else {
+        document.exitPointerLock();
+      }
+      return;
+    }
+
+    if (_e.button === 0 && document.pointerLockElement) {
+      this.attackClicked = true;
+      this.callbackAttack?.();
     }
   }
 
@@ -101,5 +120,12 @@ export class InputController {
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
     this.scrollDelta = 0;
+    this.attackClicked = false;
+  }
+
+  wasAttackClicked(): boolean {
+    const val = this.attackClicked;
+    this.attackClicked = false;
+    return val;
   }
 }

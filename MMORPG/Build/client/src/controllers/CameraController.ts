@@ -54,6 +54,10 @@ export class CameraController {
     return new pc.Vec3(Math.cos(rad), 0, -Math.sin(rad));
   }
 
+  getCamera(): pc.Entity {
+    return this.camera;
+  }
+
   getYaw(): number {
     return this.yaw;
   }

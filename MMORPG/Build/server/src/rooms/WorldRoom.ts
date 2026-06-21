@@ -125,10 +125,19 @@ export class WorldRoom extends Room<WorldState> {
     monster.attackRange = template.attackRange || 1.5;
     monster.xpReward = template.xpReward || 15;
     this.state.monsters.set(id, monster);
+    this.broadcast('monster:spawned', { id, templateId, name: monster.name, x, z, hp: monster.hp, maxHp: monster.maxHp, level: monster.level });
     return id;
   }
 
   private registerMessageHandlers(): void {
+    this.onMessage('player:set_name', (client, data: { name: string }) => {
+      const player = this.state.players.get(client.sessionId);
+      if (player) {
+        player.name = data.name.slice(0, 16);
+        this.broadcast('player:renamed', { id: player.id, name: player.name });
+      }
+    });
+
     this.onMessage('ping', (client: any) => {
       client.send('pong', { t: Date.now() });
     });
@@ -144,6 +153,35 @@ export class WorldRoom extends Room<WorldState> {
         return;
       }
       this.broadcast('player:moved', { id: player.id, x: player.x, z: player.z, rotation: player.rotation }, { except: client });
+    });
+
+    this.onMessage('player:pvp_attack', (client, data: { targetId: string }) => {
+      const attacker = this.state.players.get(client.sessionId);
+      if (!attacker) return;
+      const target = this.state.players.get(data.targetId);
+      if (!target) {
+        client.send('combat:error', { error: 'Target player not found' });
+        return;
+      }
+      const dist = Math.sqrt(Math.pow(attacker.x - target.x, 2) + Math.pow(attacker.z - target.z, 2));
+      if (dist > 5) return;
+      const result = this.combatHandler.handlePvPAttack(attacker, target);
+      if (result.killed) {
+        attacker.kills++;
+        target.deaths++;
+        const leveledUp = this.levelSystem.addXp(attacker.level, attacker.xp, 20);
+        attacker.xp = leveledUp.newXp;
+        if (leveledUp.leveledUp) {
+          attacker.level = leveledUp.newLevel;
+          attacker.statPoints += leveledUp.statPointsGained;
+        }
+        target.hp = target.maxHp;
+        this.broadcast('pvp:kill', { targetId: data.targetId, attackerId: attacker.id });
+        this.broadcast('pvp:damage', { targetId: data.targetId, attackerId: attacker.id, damage: result.damage, critical: result.critical });
+        this.broadcast('score:update', { players: Array.from(this.state.players.values()).map((p: PlayerState) => ({ id: p.id, name: p.name, kills: p.kills, deaths: p.deaths, level: p.level })) });
+      } else {
+        this.broadcast('pvp:damage', { targetId: data.targetId, attackerId: attacker.id, damage: result.damage, critical: result.critical });
+      }
     });
 
     this.onMessage('player:action', (client, data: { type: string; targetId?: string; skillId?: string }) => {
@@ -169,6 +207,7 @@ export class WorldRoom extends Room<WorldState> {
             this.broadcast('player:leveled_up', { id: player.id, name: player.name, newLevel: player.level });
           }
           this.broadcast('combat:kill', { monsterId: monster.id, playerId: player.id, xp: result.xpReward });
+          this.broadcast('monster:despawned', { id: monster.id });
           const lootSpawns = this.lootHandler.getLootSpawns();
           for (const loot of lootSpawns.values()) {
             this.broadcast('loot:spawned', { id: loot.id, x: loot.x, z: loot.z });
@@ -189,6 +228,7 @@ export class WorldRoom extends Room<WorldState> {
           if (monster.hp <= 0) {
             this.state.monsters.delete(monster.id);
             this.broadcast('combat:kill', { monsterId: monster.id, playerId: player.id, xp: monster.xpReward });
+            this.broadcast('monster:despawned', { id: monster.id });
           } else {
             this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: dmg, critical: false });
           }
@@ -509,12 +549,14 @@ export class WorldRoom extends Room<WorldState> {
     player.id = generateId();
     player.sessionId = client.sessionId;
     player.name = `Player_${client.sessionId.slice(0, 4)}`;
+    player.kills = 0;
+    player.deaths = 0;
 
     this.spawnCounter++;
-    const angle = (this.spawnCounter / 10) * Math.PI * 2;
-    const radius = 5 + (this.spawnCounter % 5) * 3;
-    player.x = Math.cos(angle) * radius;
-    player.z = Math.sin(angle) * radius;
+    const spread = 2.0;
+    const angle = ((this.spawnCounter - 1) / 4) * Math.PI * 2;
+    player.x = Math.cos(angle) * spread;
+    player.z = Math.sin(angle) * spread;
 
     this.state.players.set(client.sessionId, player);
     this.playerInventories.set(client.sessionId, []);
@@ -528,7 +570,7 @@ export class WorldRoom extends Room<WorldState> {
     });
     this.broadcast('player:joined', { id: player.id, name: player.name, x: player.x, z: player.z }, { except: client });
     client.send('world:state', {
-      players: Array.from(this.state.players.values()).map((p: PlayerState) => ({ id: p.id, name: p.name, x: p.x, z: p.z, level: p.level })),
+      players: Array.from(this.state.players.values()).map((p: PlayerState) => ({ id: p.id, name: p.name, x: p.x, z: p.z, level: p.level, rotation: p.rotation })),
       monsters: Array.from(this.state.monsters.values()).map((m: MonsterState) => ({ id: m.id, name: m.name, x: m.x, z: m.z, hp: m.hp, maxHp: m.maxHp, level: m.level })),
       timeOfDay: this.state.timeOfDay,
       weather: this.state.weather,

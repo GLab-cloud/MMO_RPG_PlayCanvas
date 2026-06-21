@@ -39,4 +39,22 @@ export class CombatHandler {
     }
     return { monsterId: targetMonster.id, damage: totalDamage, critical, killed: false };
   }
+
+  handlePvPAttack(
+    attacker: { x: number; z: number; level: number; attack: number; defense: number; dexterity: number },
+    target: { x: number; z: number; level: number; defense: number; hp: number; maxHp: number }
+  ): { damage: number; critical: boolean; killed: boolean } {
+    const dist = distance(attacker.x, attacker.z, target.x, target.z);
+    if (dist > 5) {
+      return { damage: 0, critical: false, killed: false };
+    }
+    const critical = isCriticalHit(attacker.dexterity);
+    const critMult = critical ? 2.0 : 1.0;
+    const rawDamage = (attacker.attack * 1.0 - target.defense * 0.5 + attacker.level * 2) * critMult;
+    const finalDamage = Math.max(1, Math.floor(rawDamage * (0.9 + Math.random() * 0.2)));
+    target.hp -= finalDamage;
+    const killed = target.hp <= 0;
+    if (killed) target.hp = 0;
+    return { damage: finalDamage, critical, killed };
+  }
 }
