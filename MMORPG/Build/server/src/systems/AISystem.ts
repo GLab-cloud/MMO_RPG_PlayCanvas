@@ -22,7 +22,7 @@ export class AISystem {
           this.handleChase(monster, players);
           break;
         case MonsterState.Attack:
-          this.handleAttack(monster);
+          this.handleAttack(monster, players);
           break;
         case MonsterState.Flee:
           this.handleFlee(monster, players);
@@ -88,7 +88,17 @@ export class AISystem {
     }
   }
 
-  private handleAttack(_monster: { state: MonsterState }): void {
+  private handleAttack(
+    monster: { state: MonsterState; targetId: string | null; x: number; z: number; attackRange: number },
+    players: Map<string, { id: string; x: number; z: number; level: number }>
+  ): void {
+    if (!monster.targetId) { monster.state = MonsterState.Idle; return; }
+    const player = players.get(monster.targetId);
+    if (!player) { monster.state = MonsterState.Return; monster.targetId = null; return; }
+    const dist = distance(monster.x, monster.z, player.x, player.z);
+    if (dist > monster.attackRange) {
+      monster.state = MonsterState.Chase;
+    }
   }
 
   private handleFlee(

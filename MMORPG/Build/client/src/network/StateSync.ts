@@ -13,6 +13,7 @@ interface TrackedEntity {
   hpBar?: pc.Entity;
   templateId?: string;
   glowEntity?: pc.Entity;
+  _savedScale?: pc.Vec3;
 }
 
 const INTERPOLATION_BUFFER_MS = 100;
@@ -25,6 +26,11 @@ export class StateSync {
   onPlayerRemoved: ((id: string) => void) | null = null;
   onPlayerRenamed: ((id: string, name: string) => void) | null = null;
   onPlayerHPUpdate: ((id: string, hp: number, maxHp: number) => void) | null = null;
+  onPlayerXPUpdate: ((id: string, xp: number, xpNext: number) => void) | null = null;
+  onMonsterAdded: ((id: string, name: string) => void) | null = null;
+  onMonsterRemoved: ((id: string) => void) | null = null;
+  onMonsterHPUpdate: ((id: string, hp: number, maxHp: number) => void) | null = null;
+  private deadPlayers: Set<string> = new Set();
 
   constructor(app: pc.Application) {
     this.app = app;
@@ -55,9 +61,7 @@ export class StateSync {
         tracked.lastPosition.copy(tracked.entity.getLocalPosition());
         tracked.targetPosition.set(m.x ?? 0, 0.5, m.z ?? 0);
         tracked.lastUpdate = Date.now();
-        const hpPct = m.maxHp > 0 ? (m.hp ?? 0) / m.maxHp : 0;
-        const baseScale = 0.5;
-        tracked.hpBar?.setLocalScale(baseScale * Math.max(0, hpPct), 0.04, 0.03);
+        this.onMonsterHPUpdate?.(m.id, m.hp ?? 0, m.maxHp ?? 1);
       } else if (!tracked) {
         this.addMonster(m.id, m);
       }
@@ -89,15 +93,6 @@ export class StateSync {
     head.setLocalPosition(0, 1.55, 0);
     entity.addChild(head);
 
-    const hpBar = new pc.Entity(`${id}-hp`);
-    hpBar.addComponent('render', { type: 'box' });
-    const hpMat = new pc.StandardMaterial();
-    hpMat.diffuse = new pc.Color(0.9, 0.2, 0.2); hpMat.metalness = 0; hpMat.update();
-    hpBar.render!.material = hpMat;
-    hpBar.setLocalScale(0.76, 0.05, 0.03);
-    hpBar.setLocalPosition(0, 2.25, 0);
-    entity.addChild(hpBar);
-
     const x = data.x || 0;
     const z = data.z || 0;
     entity.setLocalPosition(x, 1.0, z);
@@ -105,7 +100,7 @@ export class StateSync {
     this.app.root.addChild(entity);
 
     this.entities.set(id, {
-      id, entity, hpBar,
+      id, entity,
       lastPosition: new pc.Vec3(x, 1.0, z),
       targetPosition: new pc.Vec3(x, 1.0, z),
       lastRotation: data.rotation || 0,
@@ -121,24 +116,143 @@ export class StateSync {
     if (this.entities.has(id)) return;
 
     const entity = new pc.Entity(`monster-${id}`);
+    const templateId = data.templateId || 'rat';
 
-    const body = new pc.Entity(`${id}-mbody`);
+    const colors: Record<string, pc.Color> = {
+      rat: new pc.Color(0.6, 0.5, 0.4),
+      wolf: new pc.Color(0.45, 0.45, 0.5),
+      bear: new pc.Color(0.35, 0.25, 0.15),
+      goblin: new pc.Color(0.3, 0.7, 0.3),
+      orc: new pc.Color(0.25, 0.5, 0.2),
+      troll: new pc.Color(0.4, 0.55, 0.3),
+      dragon_whelp: new pc.Color(0.7, 0.2, 0.15),
+      skeleton: new pc.Color(0.8, 0.8, 0.75),
+      zombie: new pc.Color(0.35, 0.5, 0.3),
+      ghost: new pc.Color(0.6, 0.6, 0.8),
+    };
+    const mainColor = colors[templateId] || new pc.Color(0.8, 0.2, 0.2);
+    const bodyScale = templateId === 'rat' ? 0.35 : templateId === 'wolf' ? 0.7 : templateId === 'bear' ? 1.0 : templateId === 'troll' ? 1.1 : templateId === 'dragon_whelp' ? 0.9 : 0.5;
+
+    const body = new pc.Entity(`${id}-body`);
     body.addComponent('render', { type: 'box' });
-    const mat = new pc.StandardMaterial();
-    mat.diffuse = new pc.Color(0.8, 0.2, 0.2); mat.metalness = 0; mat.update();
-    body.render!.material = mat;
-    body.setLocalScale(0.6, 0.6, 0.6);
-    body.setLocalPosition(0, 0.3, 0);
-    entity.addChild(body);
+    const bodyMat = new pc.StandardMaterial();
+    bodyMat.diffuse = mainColor; bodyMat.metalness = 0; bodyMat.update();
+    body.render!.material = bodyMat;
 
-    const hpBar = new pc.Entity(`${id}-mhp`);
-    hpBar.addComponent('render', { type: 'box' });
-    const hpMat = new pc.StandardMaterial();
-    hpMat.diffuse = new pc.Color(0.9, 0.2, 0.2); hpMat.metalness = 0; hpMat.update();
-    hpBar.render!.material = hpMat;
-    hpBar.setLocalScale(0.5, 0.04, 0.03);
-    hpBar.setLocalPosition(0, 0.8, 0);
-    entity.addChild(hpBar);
+    if (templateId === 'rat') {
+      body.setLocalScale(0.4, 0.2, 0.25);
+      body.setLocalPosition(0, 0.1, 0);
+      entity.addChild(body);
+      const tail = new pc.Entity(`${id}-tail`);
+      tail.addComponent('render', { type: 'cylinder' });
+      const tailMat = new pc.StandardMaterial();
+      tailMat.diffuse = new pc.Color(0.5, 0.4, 0.3); tailMat.update();
+      tail.render!.material = tailMat;
+      tail.setLocalScale(0.02, 0.3, 0.02);
+      tail.setLocalPosition(-0.2, 0.05, 0);
+      tail.setLocalEulerAngles(0, 0, 30);
+      entity.addChild(tail);
+      const head = new pc.Entity(`${id}-head`);
+      head.addComponent('render', { type: 'sphere' });
+      const headMat = new pc.StandardMaterial();
+      headMat.diffuse = new pc.Color(0.55, 0.45, 0.35); headMat.update();
+      head.render!.material = headMat;
+      head.setLocalScale(0.12, 0.12, 0.12);
+      head.setLocalPosition(0.22, 0.2, 0);
+      entity.addChild(head);
+    } else if (templateId === 'wolf') {
+      body.setLocalScale(0.6, 0.35, 0.25);
+      body.setLocalPosition(0, 0.2, 0);
+      entity.addChild(body);
+      const head = new pc.Entity(`${id}-head`);
+      head.addComponent('render', { type: 'sphere' });
+      const headMat = new pc.StandardMaterial();
+      headMat.diffuse = new pc.Color(0.4, 0.4, 0.45); headMat.update();
+      head.render!.material = headMat;
+      head.setLocalScale(0.2, 0.2, 0.2);
+      head.setLocalPosition(0.35, 0.35, 0);
+      entity.addChild(head);
+      const leg1 = new pc.Entity(`${id}-leg1`);
+      leg1.addComponent('render', { type: 'cylinder' });
+      const legMat = new pc.StandardMaterial();
+      legMat.diffuse = new pc.Color(0.4, 0.4, 0.45); legMat.update();
+      leg1.render!.material = legMat;
+      leg1.setLocalScale(0.05, 0.2, 0.05);
+      leg1.setLocalPosition(0.2, 0.0, 0.15);
+      entity.addChild(leg1);
+      const leg2 = leg1.clone();
+      leg2.setLocalPosition(0.2, 0.0, -0.15);
+      entity.addChild(leg2);
+      const leg3 = leg1.clone();
+      leg3.setLocalPosition(-0.2, 0.0, 0.15);
+      entity.addChild(leg3);
+      const leg4 = leg1.clone();
+      leg4.setLocalPosition(-0.2, 0.0, -0.15);
+      entity.addChild(leg4);
+    } else if (templateId === 'bear') {
+      body.setLocalScale(0.8, 0.5, 0.5);
+      body.setLocalPosition(0, 0.25, 0);
+      entity.addChild(body);
+      const head = new pc.Entity(`${id}-head`);
+      head.addComponent('render', { type: 'sphere' });
+      const headMat = new pc.StandardMaterial();
+      headMat.diffuse = new pc.Color(0.3, 0.2, 0.1); headMat.update();
+      head.render!.material = headMat;
+      head.setLocalScale(0.3, 0.3, 0.3);
+      head.setLocalPosition(0.5, 0.45, 0);
+      entity.addChild(head);
+    } else if (templateId === 'goblin') {
+      body.setLocalScale(0.3, 0.5, 0.25);
+      body.setLocalPosition(0, 0.25, 0);
+      entity.addChild(body);
+      const head = new pc.Entity(`${id}-head`);
+      head.addComponent('render', { type: 'sphere' });
+      const headMat = new pc.StandardMaterial();
+      headMat.diffuse = new pc.Color(0.4, 0.7, 0.3); headMat.update();
+      head.render!.material = headMat;
+      head.setLocalScale(0.2, 0.2, 0.2);
+      head.setLocalPosition(0, 0.55, 0);
+      entity.addChild(head);
+    } else if (templateId === 'dragon_whelp') {
+      body.setLocalScale(0.6, 0.3, 0.6);
+      body.setLocalPosition(0, 0.15, 0);
+      entity.addChild(body);
+      const head = new pc.Entity(`${id}-head`);
+      head.addComponent('render', { type: 'cone' });
+      const headMat = new pc.StandardMaterial();
+      headMat.diffuse = new pc.Color(0.8, 0.25, 0.2); headMat.update();
+      head.render!.material = headMat;
+      head.setLocalScale(0.25, 0.3, 0.25);
+      head.setLocalPosition(0.35, 0.3, 0);
+      entity.addChild(head);
+      const wing1 = new pc.Entity(`${id}-wing1`);
+      wing1.addComponent('render', { type: 'box' });
+      const wingMat = new pc.StandardMaterial();
+      wingMat.diffuse = new pc.Color(0.6, 0.15, 0.1); wingMat.update();
+      wing1.render!.material = wingMat;
+      wing1.setLocalScale(0.3, 0.02, 0.15);
+      wing1.setLocalPosition(0, 0.3, 0.4);
+      wing1.setLocalEulerAngles(0, 0, 15);
+      entity.addChild(wing1);
+      const wing2 = wing1.clone();
+      wing2.setLocalPosition(0, 0.3, -0.4);
+      wing2.setLocalEulerAngles(0, 0, -15);
+      entity.addChild(wing2);
+    } else if (templateId === 'ghost') {
+      body.setLocalScale(0.5, 0.6, 0.3);
+      body.setLocalPosition(0, 0.3, 0);
+      const ghostMat = new pc.StandardMaterial();
+      ghostMat.diffuse = new pc.Color(0.6, 0.6, 0.8);
+      ghostMat.opacity = 0.6;
+      ghostMat.blendType = pc.BLEND_NORMAL;
+      ghostMat.update();
+      body.render!.material = ghostMat;
+      entity.addChild(body);
+    } else {
+      body.setLocalScale(bodyScale, bodyScale, bodyScale);
+      body.setLocalPosition(0, bodyScale * 0.5, 0);
+      entity.addChild(body);
+    }
 
     const x = data.x || 0;
     const z = data.z || 0;
@@ -147,13 +261,14 @@ export class StateSync {
     this.app.root.addChild(entity);
 
     this.entities.set(id, {
-      id, entity, hpBar,
+      id, entity,
       lastPosition: new pc.Vec3(x, 0.5, z),
       targetPosition: new pc.Vec3(x, 0.5, z),
       lastRotation: 0, targetRotation: 0,
       lastUpdate: Date.now(),
       type: 'monster',
     });
+    this.onMonsterAdded?.(id, data.name || data.templateId || 'Monster');
   }
 
   addEntity(id: string, data: any, type: string): void {
@@ -191,8 +306,12 @@ export class StateSync {
       } else {
         this.deathAnimation(tracked);
       }
+      if (tracked.type === 'player') {
+        this.onPlayerRemoved?.(id);
+      } else if (tracked.type === 'monster') {
+        this.onMonsterRemoved?.(id);
+      }
     }
-    this.onPlayerRemoved?.(id);
   }
 
   private pickupAnimation(tracked: TrackedEntity): void {
@@ -229,6 +348,13 @@ export class StateSync {
 
   private deathAnimation(tracked: TrackedEntity): void {
     const startScale = tracked.entity.getLocalScale().x;
+    const renders = tracked.entity.findComponents('render') as pc.RenderComponent[];
+    for (const comp of renders) {
+      if (comp && comp.material instanceof pc.StandardMaterial) {
+        comp.material.diffuse = new pc.Color(1, 0.2, 0.2);
+        comp.material.update();
+      }
+    }
     let elapsed = 0;
     const interval = setInterval(() => {
       elapsed += 50;
@@ -242,6 +368,43 @@ export class StateSync {
       const s = startScale * (1 - t);
       tracked.entity.setLocalScale(s, s, s);
     }, 50);
+  }
+
+  private playerDied(id: string): void {
+    if (this.deadPlayers.has(id)) return;
+    this.deadPlayers.add(id);
+    const tracked = this.entities.get(id);
+    if (!tracked) return;
+    const renders = tracked.entity.findComponents('render') as pc.RenderComponent[];
+    for (const comp of renders) {
+      if (comp && comp.material instanceof pc.StandardMaterial) {
+        comp.material.diffuse = new pc.Color(1, 0.15, 0.15);
+        comp.material.update();
+      }
+    }
+    tracked._savedScale = tracked.entity.getLocalScale().clone();
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += 50;
+      const t = elapsed / 400;
+      if (t >= 1) {
+        clearInterval(interval);
+        tracked.entity.enabled = false;
+        return;
+      }
+      const s = 1 - t;
+      tracked.entity.setLocalScale(s, s, s);
+    }, 50);
+  }
+
+  private playerRevived(id: string): void {
+    this.deadPlayers.delete(id);
+    const tracked = this.entities.get(id);
+    if (!tracked) return;
+    tracked.entity.enabled = true;
+    if (tracked._savedScale) {
+      tracked.entity.setLocalScale(tracked._savedScale);
+    }
   }
 
   addWeapon(id: string, data: any): void {
@@ -373,7 +536,7 @@ export class StateSync {
     glowEntity.setLocalScale(0.6, 0.6, 0.6);
     entity.addChild(glowEntity);
 
-    entity.setLocalScale(0.7, 0.7, 0.7);
+    entity.setLocalScale(1.4, 1.4, 1.4);
     const x = data.x || 0;
     const z = data.z || 0;
     entity.setLocalPosition(x, 0.3, z);
@@ -389,6 +552,32 @@ export class StateSync {
       lastUpdate: Date.now(),
       type: 'weapon',
     });
+  }
+
+  flashEntity(id: string): void {
+    const tracked = this.entities.get(id);
+    if (!tracked) return;
+    const renders = tracked.entity.findComponents('render') as any[];
+    for (const comp of renders) {
+      if (comp && comp.material instanceof pc.StandardMaterial) {
+        const orig = comp.material.diffuse.clone();
+        comp.material.diffuse = new pc.Color(1, 1, 1);
+        comp.material.update();
+        setTimeout(() => {
+          if (comp.material) {
+            comp.material.diffuse = orig;
+            comp.material.update();
+          }
+        }, 100);
+      }
+    }
+  }
+
+  getEntityPosition(id: string): { x: number; z: number } | null {
+    const tracked = this.entities.get(id);
+    if (!tracked) return null;
+    const pos = tracked.entity.getLocalPosition();
+    return { x: pos.x, z: pos.z };
   }
 
   getWeaponPositions(): { id: string; templateId: string; x: number; z: number }[] {
@@ -461,6 +650,17 @@ export class StateSync {
       if (tracked.type === 'monster') {
         const pos = tracked.entity.getLocalPosition();
         result.push({ id, x: pos.x, z: pos.z });
+      }
+    }
+    return result;
+  }
+
+  getAllMonsterPositions(): { id: string; x: number; y: number; z: number }[] {
+    const result: { id: string; x: number; y: number; z: number }[] = [];
+    for (const [id, tracked] of this.entities) {
+      if (tracked.type === 'monster') {
+        const pos = tracked.entity.getLocalPosition();
+        result.push({ id, x: pos.x, y: pos.y + 0.8, z: pos.z });
       }
     }
     return result;

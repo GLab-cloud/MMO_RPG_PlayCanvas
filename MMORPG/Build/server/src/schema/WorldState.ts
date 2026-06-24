@@ -32,6 +32,7 @@ export class PlayerState extends Schema {
   @type('boolean') connected: boolean = true;
   @type('number') kills: number = 0;
   @type('number') deaths: number = 0;
+  @type('string') equippedWeapon: string = '';
 }
 
 export class MonsterState extends Schema {

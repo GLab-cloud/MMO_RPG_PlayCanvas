@@ -14,9 +14,9 @@ const NPC_INTERACT_RANGE = 4.0;
 const NPC_DIALOGS: Record<string, string[]> = {
   'Weapon Merchant': ['Welcome! Check out my fine weapons.', 'A sharp blade is a warrior\'s best friend.'],
   'Armor Merchant': ['Need protection? I have the best armor in town.', 'Defense is just as important as attack!'],
-  'Magic Merchant': ['Harness the power of magic!', 'Spells can turn the tide of any battle.'],
+  'Magic Merchant': ['Harness the power of magic!', 'Spells can turn the tide of any battle.', 'Collect magic weapons like wands and orbs to unleash true power!'],
   'Storage Keeper': ['Store your items here safely.', 'Never know what you might find on your travels.'],
-  'Quest Guide': ['Find and defeat monsters to gain XP, level up, and earn rewards!', 'Stay alive — HP matters. Use potions to heal!'],
+  'Quest Guide': ['Find and defeat monsters to gain XP, level up, and earn rewards!', 'Stay alive — HP matters. Use potions to heal!', 'Search for magic weapons — staves, wands, and orbs boost your magic attack!'],
   'Skill Master': ['Learn new abilities to become stronger.', 'Master your skills to defeat tougher foes.'],
   'Class Master': ['Choose your class wisely.', 'Each class has unique strengths.'],
   'Transport NPC': ['Travel to other towns from here.', 'The world is vast — explore every corner!'],
@@ -39,8 +39,11 @@ export class PlayerController {
   private stateSync: StateSync;
   private onPanelToggle: ((panel: string) => void) | null = null;
   private attackAnimTime: number = 0;
+  private weaponType: string = 'fist';
   private isDead: boolean = false;
   private bodyParts: pc.Entity[] = [];
+  private targetDirection: number = 0;
+  private lastTargetPos: { x: number; z: number } | null = null;
 
   constructor(app: pc.Application, network: NetworkManager, input: InputController, camera: CameraController) {
     this.app = app;
@@ -103,6 +106,136 @@ export class PlayerController {
     this.onPanelToggle = cb;
   }
 
+  private weaponEntity: pc.Entity | null = null;
+
+  onCombatFeedback: ((text: string, color: string, duration: number) => void) | null = null;
+
+  setWeaponType(type: string): void {
+    this.weaponType = type;
+    this.updateWeaponModel(type);
+    this.equipVFX();
+  }
+
+  private equipVFX(): void {
+    const vfx = new pc.Entity('equip-vfx');
+    vfx.addComponent('render', { type: 'sphere' });
+    const mat = new pc.StandardMaterial();
+    mat.diffuse = new pc.Color(0.3, 0.7, 1);
+    mat.emissive = new pc.Color(0.2, 0.5, 0.8);
+    mat.opacity = 0.6;
+    mat.blendType = pc.BLEND_NORMAL;
+    mat.update();
+    vfx.render!.material = mat;
+    vfx.setLocalScale(0.1, 0.1, 0.1);
+    vfx.setLocalPosition(0, 1.8, 0.5);
+    this.player.addChild(vfx);
+    const start = Date.now();
+    const expand = () => {
+      const t = (Date.now() - start) / 500;
+      if (t >= 1) { vfx.destroy(); return; }
+      const s = 0.1 + t * 1.5;
+      vfx.setLocalScale(s, s, s);
+      mat.opacity = 0.6 * (1 - t);
+      mat.update();
+      requestAnimationFrame(expand);
+    };
+    expand();
+  }
+
+  private updateWeaponModel(templateId: string): void {
+    if (this.weaponEntity) {
+      this.weaponEntity.destroy();
+      this.weaponEntity = null;
+    }
+    const wep = new pc.Entity('equipped-weapon');
+    const s = 1.0;
+    if (templateId === 'sword' || templateId === 'dagger') {
+      const blade = new pc.Entity('w-blade');
+      blade.addComponent('render', { type: 'box' });
+      const bm = new pc.StandardMaterial();
+      bm.diffuse = new pc.Color(0.8, 0.8, 0.9); bm.metalness = 0.6; bm.update();
+      blade.render!.material = bm;
+      blade.setLocalScale(0.08 * s, 1.0 * s, 0.02 * s);
+      blade.setLocalPosition(0, 0.6 * s, 0);
+      wep.addChild(blade);
+      const handle = new pc.Entity('w-handle');
+      handle.addComponent('render', { type: 'cylinder' });
+      const hm = new pc.StandardMaterial();
+      hm.diffuse = new pc.Color(0.4, 0.25, 0.1); hm.metalness = 0; hm.update();
+      handle.render!.material = hm;
+      handle.setLocalScale(0.06 * s, 0.25 * s, 0.06 * s);
+      handle.setLocalPosition(0, -0.1 * s, 0);
+      wep.addChild(handle);
+    } else if (templateId === 'axe') {
+      const head = new pc.Entity('w-head');
+      head.addComponent('render', { type: 'box' });
+      const hm = new pc.StandardMaterial();
+      hm.diffuse = new pc.Color(0.55, 0.55, 0.6); hm.metalness = 0.5; hm.update();
+      head.render!.material = hm;
+      head.setLocalScale(0.35 * s, 0.3 * s, 0.05 * s);
+      head.setLocalPosition(0, 0.5 * s, 0);
+      wep.addChild(head);
+      const handle = new pc.Entity('w-handle');
+      handle.addComponent('render', { type: 'cylinder' });
+      const hm2 = new pc.StandardMaterial();
+      hm2.diffuse = new pc.Color(0.45, 0.3, 0.1); hm2.metalness = 0; hm2.update();
+      handle.render!.material = hm2;
+      handle.setLocalScale(0.06 * s, 0.6 * s, 0.06 * s);
+      handle.setLocalPosition(0, 0, 0);
+      wep.addChild(handle);
+    } else if (templateId === 'staff' || templateId === 'magic_staff') {
+      const rod = new pc.Entity('w-rod');
+      rod.addComponent('render', { type: 'cylinder' });
+      const rm = new pc.StandardMaterial();
+      rm.diffuse = new pc.Color(0.5, 0.35, 0.15); rm.metalness = 0; rm.update();
+      rod.render!.material = rm;
+      rod.setLocalScale(0.06 * s, 1.2 * s, 0.06 * s);
+      rod.setLocalPosition(0, 0.55 * s, 0);
+      wep.addChild(rod);
+      const crystal = new pc.Entity('w-crystal');
+      crystal.addComponent('render', { type: 'sphere' });
+      const cm = new pc.StandardMaterial();
+      cm.diffuse = new pc.Color(0.2, 0.5, 0.9); cm.emissive = new pc.Color(0.1, 0.3, 0.7); cm.metalness = 0; cm.update();
+      crystal.render!.material = cm;
+      crystal.setLocalScale(0.15 * s, 0.15 * s, 0.15 * s);
+      crystal.setLocalPosition(0, 1.2 * s, 0);
+      wep.addChild(crystal);
+    } else if (templateId === 'wand' || templateId === 'orb') {
+      const orb = new pc.Entity('w-orb');
+      orb.addComponent('render', { type: 'sphere' });
+      const om = new pc.StandardMaterial();
+      om.diffuse = new pc.Color(0.4, 0.6, 1); om.emissive = new pc.Color(0.2, 0.3, 0.8); om.metalness = 0; om.update();
+      orb.render!.material = om;
+      orb.setLocalScale(0.2 * s, 0.2 * s, 0.2 * s);
+      orb.setLocalPosition(0, 0.6 * s, 0);
+      wep.addChild(orb);
+    } else if (templateId === 'tome') {
+      const book = new pc.Entity('w-book');
+      book.addComponent('render', { type: 'box' });
+      const bm = new pc.StandardMaterial();
+      bm.diffuse = new pc.Color(0.6, 0.2, 0.2); bm.metalness = 0; bm.update();
+      book.render!.material = bm;
+      book.setLocalScale(0.3 * s, 0.4 * s, 0.05 * s);
+      book.setLocalPosition(0, 0.3 * s, 0);
+      wep.addChild(book);
+    } else if (templateId === 'crystal_sword') {
+      const blade = new pc.Entity('w-blade');
+      blade.addComponent('render', { type: 'box' });
+      const bm = new pc.StandardMaterial();
+      bm.diffuse = new pc.Color(0.6, 0.8, 1); bm.emissive = new pc.Color(0.2, 0.4, 0.8); bm.metalness = 0.3; bm.update();
+      blade.render!.material = bm;
+      blade.setLocalScale(0.08 * s, 1.0 * s, 0.02 * s);
+      blade.setLocalPosition(0, 0.6 * s, 0);
+      wep.addChild(blade);
+    } else {
+      return;
+    }
+    wep.setLocalPosition(0.4, 1.2, 0);
+    wep.setLocalEulerAngles(0, 0, -30);
+    this.player.addChild(wep);
+    this.weaponEntity = wep;
+  }
+
   getPlayer(): pc.Entity {
     return this.player;
   }
@@ -114,6 +247,7 @@ export class PlayerController {
 
     const entities = this.stateSync.getAllEntityPositions();
     for (const e of entities) {
+      if (e.type !== 'monster' && e.type !== 'player') continue;
       const dx = e.x - pos.x;
       const dz = e.z - pos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
@@ -128,28 +262,101 @@ export class PlayerController {
   doAttack(): void {
     if (this.isDead) return;
     if (!this.combat.canAttack()) return;
+    if (this.weaponType === 'fist') {
+      this.combat.attack();
+      this.onCombatFeedback?.('Pick up a weapon first!', '#ff6666', 1200);
+      return;
+    }
 
     const target = this.getNearestTarget(this.combat.attackRange);
     if (target) {
       if (target.type === 'monster') {
-        this.network.sendToWorld('player:action', { type: 'attack', targetId: target.id });
-      } else {
-        this.network.sendPlayerAttack(target.id);
+        const pos = this.player.getLocalPosition();
+        this.network.sendToWorld('player:action', { type: 'attack', targetId: target.id, x: pos.x, z: pos.z });
+        const tpos = this.stateSync.getEntityPosition(target.id);
+        if (tpos) this.lastTargetPos = { x: tpos.x, z: tpos.z };
+      } else if (target.type === 'player') {
+        const pos = this.player.getLocalPosition();
+        this.network.sendPlayerAttack(target.id, pos.x, pos.z);
+        const tpos = this.stateSync.getEntityPosition(target.id);
+        if (tpos) this.lastTargetPos = { x: tpos.x, z: tpos.z };
+      }
+      const ppos = this.player.getLocalPosition();
+      if (this.lastTargetPos) {
+        this.targetDirection = Math.atan2(this.lastTargetPos.x - ppos.x, this.lastTargetPos.z - ppos.z);
       }
       this.combat.attack();
-      this.attackAnimTime = 0.3;
+      switch (this.weaponType) {
+        case 'sword':
+        case 'axe':
+        case 'dagger':
+          this.attackAnimTime = 0.4;
+          break;
+        case 'gun':
+          this.attackAnimTime = 0.35;
+          break;
+        case 'staff':
+          this.attackAnimTime = 0.5;
+          this.createGlowEffect();
+          break;
+        default:
+          this.attackAnimTime = 0.3;
+      }
     }
   }
 
   die(): void {
     this.isDead = true;
-    this.player.setLocalEulerAngles(90, this.player.getLocalEulerAngles().y, 0);
+    const renders = this.player.findComponents('render') as pc.RenderComponent[];
+    for (const comp of renders) {
+      if (comp && comp.material instanceof pc.StandardMaterial) {
+        comp.material.diffuse = new pc.Color(1, 0.15, 0.15);
+        comp.material.update();
+      }
+    }
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += 50;
+      const t = elapsed / 400;
+      if (t >= 1) {
+        clearInterval(interval);
+        this.player.enabled = false;
+        return;
+      }
+      const s = 1 - t;
+      this.player.setLocalScale(s, s, s);
+    }, 50);
   }
 
   respawn(): void {
     this.isDead = false;
+    this.player.setLocalScale(1, 1, 1);
     this.player.setLocalEulerAngles(0, this.player.getLocalEulerAngles().y, 0);
     this.player.setLocalPosition(0, 2, 0);
+    this.player.enabled = true;
+    this.rebuildRenderMaterials();
+  }
+
+  private rebuildRenderMaterials(): void {
+    const colors: [number, number, number][] = [
+      [0.7, 0.8, 0.7],
+      [0.75, 0.6, 0.75],
+      [0.7, 0.08, 0.7],
+      [0.95, 0.8, 0.7],
+      [0.15, 0.1, 0.05],
+    ];
+    let idx = 0;
+    for (const child of this.player.children) {
+      if (idx >= colors.length) break;
+      const ent = child as pc.Entity;
+      if (ent.render && ent.render.material instanceof pc.StandardMaterial) {
+        const mat = ent.render.material;
+        mat.diffuse = new pc.Color(colors[idx][0], colors[idx][1], colors[idx][2]);
+        mat.metalness = 0;
+        mat.update();
+        idx++;
+      }
+    }
   }
 
   private checkCollision(x: number, z: number): boolean {
@@ -213,6 +420,37 @@ export class PlayerController {
     if (weapon) {
       this.network.sendToWorld('player:action', { type: 'pickup_weapon', targetId: weapon.id });
     }
+  }
+
+  private createGlowEffect(): void {
+    const glow = new pc.Entity('attack-glow');
+    glow.addComponent('render', { type: 'sphere' });
+    const mat = new pc.StandardMaterial();
+    mat.diffuse = new pc.Color(0.5, 0.2, 0.8);
+    mat.emissive = new pc.Color(0.4, 0.1, 0.7);
+    mat.opacity = 0.6;
+    mat.blendType = pc.BLEND_NORMAL;
+    mat.metalness = 0;
+    mat.update();
+    glow.render!.material = mat;
+    glow.setLocalScale(0.8, 0.8, 0.8);
+    glow.setLocalPosition(0, 0.8, 0.5);
+    this.player.addChild(glow);
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += 50;
+      const t = elapsed / 500;
+      if (t >= 1) {
+        clearInterval(interval);
+        glow.destroy();
+        return;
+      }
+      const s = 0.8 * (1 + t);
+      glow.setLocalScale(s, s, s);
+      const fadeMat = glow.render!.material as pc.StandardMaterial;
+      fadeMat.opacity = 0.6 * (1 - t);
+      fadeMat.update();
+    }, 50);
   }
 
   update(dt: number): void {
@@ -280,11 +518,46 @@ export class PlayerController {
 
     if (this.attackAnimTime > 0) {
       this.attackAnimTime -= dt;
-      const scale = 1 + Math.sin(this.attackAnimTime * 30) * 0.08;
+      const t = this.attackAnimTime;
+      let scale = 1;
+      let rotationOffset = 0;
+      switch (this.weaponType) {
+        case 'sword':
+        case 'axe':
+        case 'dagger':
+          scale = 1 + Math.sin(t * 25) * 0.15;
+          break;
+        case 'gun':
+          scale = 1 + Math.sin(t * 30) * 0.06;
+          rotationOffset = Math.sin(t * 20) * 15;
+          break;
+        case 'staff':
+          scale = 1 + Math.sin(t * 20) * 0.12;
+          break;
+        default:
+          scale = 1 + Math.sin(t * 30) * 0.08;
+      }
       for (let i = 1; i < this.bodyParts.length; i++) {
         this.bodyParts[i].setLocalScale(
           0.75 * scale, 0.6 * scale, 0.75 * scale
         );
+      }
+      if (this.weaponEntity) {
+        const swing = Math.sin(t * 20);
+        const playerAngle = this.player.getLocalEulerAngles().y * Math.PI / 180;
+        const yawDiff = this.targetDirection - playerAngle;
+        const wepYaw = yawDiff * 180 / Math.PI * swing;
+        const wepPitch = swing * 50;
+        this.weaponEntity.setLocalEulerAngles(wepPitch, wepYaw, -30 + swing * 20);
+        this.weaponEntity.setLocalPosition(0.5, 1.2, 0.2);
+      }
+      if (rotationOffset !== 0) {
+        this.player.setLocalEulerAngles(0, this.player.getLocalEulerAngles().y + rotationOffset, 0);
+      }
+    } else {
+      if (this.weaponEntity) {
+        this.weaponEntity.setLocalPosition(0.4, 1.2, 0);
+        this.weaponEntity.setLocalEulerAngles(0, 0, -30);
       }
     }
 

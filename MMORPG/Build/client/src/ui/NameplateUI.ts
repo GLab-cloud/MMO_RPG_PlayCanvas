@@ -30,9 +30,7 @@ export class NameplateUI {
     el.appendChild(hpBar);
     const xpEl = document.createElement('div');
     xpEl.className = 'nameplate-xp';
-    if (isLocal) {
-      xpEl.textContent = 'XP: 0/100';
-    }
+    xpEl.textContent = 'XP: 0/100';
     el.appendChild(xpEl);
     this.container.appendChild(el);
     this.nameplates.set(id, { el, nameEl, hpBar, hpFill, xpEl });
@@ -60,8 +58,9 @@ export class NameplateUI {
     }
   }
 
-  updateNameplateXP(xp: number, xpNext: number): void {
-    for (const [, np] of this.nameplates) {
+  updateNameplateXP(id: string, xp: number, xpNext: number): void {
+    const np = this.nameplates.get(id);
+    if (np) {
       np.xpEl.textContent = `XP: ${xp}/${xpNext}`;
     }
   }
@@ -82,6 +81,28 @@ export class NameplateUI {
         np.el.style.display = 'none';
       }
     }
+  }
+
+  addMonsterNameplate(id: string, name: string): void {
+    if (this.nameplates.has(id)) return;
+    const el = document.createElement('div');
+    el.className = 'nameplate monster-nameplate';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'nameplate-name monster-name';
+    nameEl.textContent = name;
+    el.appendChild(nameEl);
+    const hpBar = document.createElement('div');
+    hpBar.className = 'nameplate-hp-bar monster-hp-bar';
+    const hpFill = document.createElement('div');
+    hpFill.className = 'nameplate-hp-fill monster-hp-fill';
+    hpBar.appendChild(hpFill);
+    el.appendChild(hpBar);
+    this.container.appendChild(el);
+    this.nameplates.set(id, { el, nameEl, hpBar, hpFill, xpEl: document.createElement('div') });
+  }
+
+  removeMonsterNameplate(id: string): void {
+    this.removeNameplate(id);
   }
 
   clear(): void {

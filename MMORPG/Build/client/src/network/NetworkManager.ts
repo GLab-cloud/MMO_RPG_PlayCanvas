@@ -30,6 +30,7 @@ export interface CombatCallbacks {
   onDamageDealt(monsterId: string, damage: number, critical: boolean): void;
   onMonsterKilled(monsterId: string, xp: number): void;
   onPlayerDamage(attackerId: string, targetId: string, damage: number, critical: boolean): void;
+  onPlayerKilled?(attackerId: string, targetId: string): void;
   onScoreUpdate?(players: { id: string; name: string; kills: number; deaths: number; level: number }[]): void;
 }
 
@@ -51,6 +52,7 @@ export class NetworkManager {
   private combatCallbacks: CombatCallbacks | null = null;
   private _localPlayerId: string = '';
   private onPlayerLeftCallback: ((id: string) => void) | null = null;
+  onRespawnedCallback: ((x: number, z: number) => void) | null = null;
 
   constructor(pcApp: pc.Application, sceneManager: SceneManager) {
     this.pcApp = pcApp;
@@ -156,8 +158,8 @@ export class NetworkManager {
     });
   }
 
-  sendPlayerAttack(targetId: string): void {
-    this.sendToWorld('player:pvp_attack', { targetId });
+  sendPlayerAttack(targetId: string, x?: number, z?: number): void {
+    this.sendToWorld('player:pvp_attack', { targetId, x, z });
   }
 
   private setupLobbyHandlers(): void {
@@ -205,6 +207,10 @@ export class NetworkManager {
 
       for (const p of (state as any).players?.values() || []) {
         this.stateSync.onPlayerHPUpdate?.(p.id, p.hp, p.maxHp);
+        if (this.stateSync.onPlayerXPUpdate) {
+          const xpNext = Math.floor(100 * Math.pow(p.level, 1.5) + 50 * p.level);
+          this.stateSync.onPlayerXPUpdate(p.id, p.xp, xpNext);
+        }
       }
     });
 
@@ -226,6 +232,10 @@ export class NetworkManager {
       this.stateSync.onPlayerRenamed?.(data.id, data.name);
     });
 
+    this.worldRoom.onMessage('player:respawned', (data: { x: number; z: number }) => {
+      this.onRespawnedCallback?.(data.x, data.z);
+    });
+
     this.worldRoom.onMessage('player:left', (data: { id: string; name: string }) => {
       this.stateSync.removeEntity(data.id);
       this.onPlayerLeftCallback?.(data.id);
@@ -235,26 +245,35 @@ export class NetworkManager {
       this.stateSync.updatePosition(data.id, data.x, data.z, data.rotation);
     });
 
-    this.worldRoom.onMessage('combat:damage', (data: { monsterId: string; playerId: string; damage: number; critical: boolean }) => {
+    this.worldRoom.onMessage('combat:damage', (data: { monsterId: string; playerId: string; damage: number; critical: boolean; hp: number; maxHp: number }) => {
+      this.stateSync.flashEntity(data.monsterId);
+      this.stateSync.onMonsterHPUpdate?.(data.monsterId, data.hp, data.maxHp);
       this.combatCallbacks?.onDamageDealt(data.monsterId, data.damage, data.critical);
     });
 
     this.worldRoom.onMessage('combat:kill', (data: { monsterId: string; playerId: string; xp: number }) => {
       this.stateSync.removeEntity(data.monsterId, false);
-      setTimeout(() => this.combatCallbacks?.onMonsterKilled(data.monsterId, data.xp), 400);
+      if (data.playerId === this.stateSync.localPlayerId) {
+        setTimeout(() => this.combatCallbacks?.onMonsterKilled(data.monsterId, data.xp), 400);
+      }
     });
 
-    this.worldRoom.onMessage('combat:player_damage', (data: { targetId: string; attackerId: string; damage: number; critical: boolean }) => {
+    this.worldRoom.onMessage('combat:player_damage', (data: { targetId: string; attackerId: string; damage: number; critical: boolean; hp: number; maxHp: number }) => {
       this.combatCallbacks?.onPlayerDamage(data.attackerId, data.targetId, data.damage, data.critical);
+      this.stateSync.onPlayerHPUpdate?.(data.targetId, data.hp, data.maxHp);
     });
 
-    this.worldRoom.onMessage('pvp:damage', (data: { targetId: string; attackerId: string; damage: number; critical: boolean }) => {
+    this.worldRoom.onMessage('pvp:damage', (data: { targetId: string; attackerId: string; damage: number; critical: boolean; hp: number; maxHp: number }) => {
       this.combatCallbacks?.onPlayerDamage(data.attackerId, data.targetId, data.damage, data.critical);
+      this.stateSync.onPlayerHPUpdate?.(data.targetId, data.hp, data.maxHp);
     });
 
     this.worldRoom.onMessage('pvp:kill', (data: { targetId: string; attackerId: string }) => {
       if (data.targetId === this.stateSync.localPlayerId) {
         this.combatCallbacks?.onPlayerDamage(data.attackerId, data.targetId, 9999, false);
+      }
+      if (data.attackerId === this.stateSync.localPlayerId) {
+        this.combatCallbacks?.onPlayerKilled?.(data.attackerId, data.targetId);
       }
     });
 
@@ -275,7 +294,7 @@ export class NetworkManager {
     });
 
     this.worldRoom.onMessage('monster:despawned', (data: { id: string }) => {
-      this.stateSync.removeEntity(data.id);
+      this.stateSync.removeEntity(data.id, false);
     });
 
     this.worldRoom.onMessage('weapon:spawned', (data: any) => {

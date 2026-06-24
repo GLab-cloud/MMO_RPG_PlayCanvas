@@ -607,7 +607,8 @@ canvas {
   margin: 0 0 0.5rem;
 }
 #death-screen p { color: #94a3b8; font-size: 0.9rem; margin-bottom: 0.3rem; }
-#death-screen .btn { width: 140px; height: 32px; font-size: 0.85rem; margin-top: 0.8rem; }
+#death-screen .btn { width: 100px; height: 50px; font-size: 0.75rem; margin-top: 0.8rem; }
+#death-screen .btn-primary { border-radius: 8px; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 #inventory-overlay {

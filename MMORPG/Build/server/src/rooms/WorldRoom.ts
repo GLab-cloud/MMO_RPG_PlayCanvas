@@ -39,11 +39,16 @@ const MONSTER_TEMPLATES: Record<string, any> = {
 };
 
 const WEAPON_TEMPLATES: Record<string, any> = {
-  sword: { name: 'Iron Sword', attack: 5 },
-  gun: { name: 'Pistol', attack: 6 },
-  axe: { name: 'Battle Axe', attack: 7 },
-  staff: { name: 'Wooden Staff', magicAttack: 5 },
-  dagger: { name: 'Iron Dagger', attack: 4, critRate: 0.03 },
+  sword: { name: 'Iron Sword', attack: 5, type: 'melee' },
+  gun: { name: 'Pistol', attack: 6, type: 'ranged' },
+  axe: { name: 'Battle Axe', attack: 7, type: 'melee' },
+  staff: { name: 'Wooden Staff', magicAttack: 5, type: 'magic' },
+  dagger: { name: 'Iron Dagger', attack: 4, critRate: 0.03, type: 'melee' },
+  wand: { name: 'Magic Wand', magicAttack: 8, critRate: 0.02, type: 'magic' },
+  orb: { name: 'Crystal Orb', magicAttack: 12, critRate: 0.05, type: 'magic' },
+  tome: { name: 'Arcane Tome', magicAttack: 15, type: 'magic' },
+  magic_staff: { name: 'Enchanted Staff', magicAttack: 20, type: 'magic' },
+  crystal_sword: { name: 'Crystal Sword', attack: 8, magicAttack: 5, type: 'magic' },
 };
 
 export class WorldRoom extends Room<WorldState> {
@@ -78,6 +83,16 @@ export class WorldRoom extends Room<WorldState> {
   private activeTrades: Map<string, string> = new Map();
 
   private spawnedWeapons: Map<string, { id: string; templateId: string; picked: boolean }> = new Map();
+  private playerWeapons: Map<string, Set<string>> = new Map();
+
+  private applyWeaponStats(player: PlayerState, templateId: string, remove: boolean = false): void {
+    const template = WEAPON_TEMPLATES[templateId];
+    if (!template) return;
+    const sign = remove ? -1 : 1;
+    if (template.attack) player.attack += template.attack * sign;
+    if (template.magicAttack) player.magicAttack += template.magicAttack * sign;
+    if (template.critRate) player.dexterity += Math.round(template.critRate * 100) * sign;
+  }
 
   onCreate(_options: any): void {
     this.setState(new WorldState());
@@ -146,7 +161,7 @@ export class WorldRoom extends Room<WorldState> {
     for (const sessionId of this.state.players.keys()) {
       const player = this.state.players.get(sessionId);
       if (!player) continue;
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 6; i++) {
         const angle = Math.random() * Math.PI * 2;
         const dist = 3 + Math.random() * 5;
         const templateId = templates[Math.floor(Math.random() * templates.length)];
@@ -197,16 +212,23 @@ export class WorldRoom extends Room<WorldState> {
       this.broadcast('player:moved', { id: player.id, x: player.x, z: player.z, rotation: player.rotation }, { except: client });
     });
 
-    this.onMessage('player:pvp_attack', (client, data: { targetId: string }) => {
+    this.onMessage('player:pvp_attack', (client, data: { targetId: string; x?: number; z?: number }) => {
       const attacker = this.state.players.get(client.sessionId);
       if (!attacker) return;
-      const target = this.state.players.get(data.targetId);
+      if (!attacker.equippedWeapon) {
+        client.send('combat:error', { error: 'No weapon equipped' });
+        return;
+      }
+      if (data.x !== undefined && data.z !== undefined) {
+        attacker.x = data.x; attacker.z = data.z;
+      }
+      const target = this.getPlayerByPlayerId(data.targetId);
       if (!target) {
         client.send('combat:error', { error: 'Target player not found' });
         return;
       }
       const dist = Math.sqrt(Math.pow(attacker.x - target.x, 2) + Math.pow(attacker.z - target.z, 2));
-      if (dist > 5) return;
+      if (dist > 6) return;
       const result = this.combatHandler.handlePvPAttack(attacker, target);
       if (result.killed) {
         attacker.kills++;
@@ -217,25 +239,44 @@ export class WorldRoom extends Room<WorldState> {
           attacker.level = leveledUp.newLevel;
           attacker.statPoints += leveledUp.statPointsGained;
         }
-        target.hp = target.maxHp;
         this.broadcast('pvp:kill', { targetId: data.targetId, attackerId: attacker.id });
-        this.broadcast('pvp:damage', { targetId: data.targetId, attackerId: attacker.id, damage: result.damage, critical: result.critical });
+        this.broadcast('pvp:damage', { targetId: data.targetId, attackerId: attacker.id, damage: result.damage, critical: result.critical, hp: target.hp, maxHp: target.maxHp });
         this.broadcast('score:update', { players: Array.from(this.state.players.values()).map((p: PlayerState) => ({ id: p.id, name: p.name, kills: p.kills, deaths: p.deaths, level: p.level })) });
       } else {
-        this.broadcast('pvp:damage', { targetId: data.targetId, attackerId: attacker.id, damage: result.damage, critical: result.critical });
+        this.broadcast('pvp:damage', { targetId: data.targetId, attackerId: attacker.id, damage: result.damage, critical: result.critical, hp: target.hp, maxHp: target.maxHp });
       }
     });
 
-    this.onMessage('player:action', (client, data: { type: string; targetId?: string; skillId?: string }) => {
+    this.onMessage('player:respawn', (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (player) {
+        player.hp = player.maxHp;
+        player.x = 0;
+        player.z = 0;
+        this.broadcast('player:moved', { id: player.id, x: 0, z: 0, rotation: 0 });
+        client.send('player:respawned', { x: 0, z: 0 });
+      }
+    });
+
+    this.onMessage('player:action', (client, data: { type: string; targetId?: string; skillId?: string; x?: number; z?: number }) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
+      if (data.x !== undefined && data.z !== undefined) {
+        player.x = data.x; player.z = data.z;
+      }
       if (data.type === 'attack' && data.targetId) {
+        if (!player.equippedWeapon) {
+          client.send('combat:error', { error: 'No weapon equipped' });
+          return;
+        }
         const monster = this.state.monsters.get(data.targetId);
         if (!monster) {
           client.send('combat:error', { error: 'Target not found' });
           return;
         }
-        const result = this.combatHandler.handleAttack(player, monster, this.state.monsters, this.lootHandler.getLootSpawns());
+        const weaponTemplate = WEAPON_TEMPLATES[player.equippedWeapon];
+        const weaponType = weaponTemplate?.type || 'melee';
+        const result = this.combatHandler.handleAttack(player, monster, this.state.monsters, this.lootHandler.getLootSpawns(), weaponType);
         if (result.killed && result.xpReward) {
           const leveledUp = this.levelSystem.addXp(player.level, player.xp, result.xpReward);
           player.xp = leveledUp.newXp;
@@ -248,6 +289,7 @@ export class WorldRoom extends Room<WorldState> {
             player.mp = player.maxMp;
             this.broadcast('player:leveled_up', { id: player.id, name: player.name, newLevel: player.level });
           }
+          this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: result.damage, critical: result.critical, hp: monster.hp, maxHp: monster.maxHp });
           this.broadcast('combat:kill', { monsterId: monster.id, playerId: player.id, xp: result.xpReward });
           this.broadcast('monster:despawned', { id: monster.id });
           const lootSpawns = this.lootHandler.getLootSpawns();
@@ -255,7 +297,7 @@ export class WorldRoom extends Room<WorldState> {
             this.broadcast('loot:spawned', { id: loot.id, x: loot.x, z: loot.z });
           }
         } else {
-          this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: result.damage, critical: result.critical });
+          this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: result.damage, critical: result.critical, hp: monster.hp, maxHp: monster.maxHp });
         }
       } else if (data.type === 'skill' && data.skillId && data.targetId) {
         const skillResult = this.skillHandler.useSkill(player, data.skillId);
@@ -269,10 +311,11 @@ export class WorldRoom extends Room<WorldState> {
           monster.hp -= Math.max(1, dmg);
           if (monster.hp <= 0) {
             this.state.monsters.delete(monster.id);
+            this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: dmg, critical: false, hp: 0, maxHp: monster.maxHp });
             this.broadcast('combat:kill', { monsterId: monster.id, playerId: player.id, xp: monster.xpReward });
             this.broadcast('monster:despawned', { id: monster.id });
           } else {
-            this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: dmg, critical: false });
+            this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: dmg, critical: false, hp: monster.hp, maxHp: monster.maxHp });
           }
         }
         this.broadcast('skill:used', { playerId: player.id, skillId: data.skillId });
@@ -291,11 +334,38 @@ export class WorldRoom extends Room<WorldState> {
         this.state.weapons.delete(data.targetId);
         this.spawnedWeapons.delete(data.targetId);
         const template = WEAPON_TEMPLATES[weapon.templateId];
+        if (template) {
+          const collected = this.playerWeapons.get(client.sessionId);
+          if (collected) collected.add(weapon.templateId);
+          if (player.equippedWeapon) {
+            this.applyWeaponStats(player, player.equippedWeapon, true);
+          }
+          player.equippedWeapon = weapon.templateId;
+          this.applyWeaponStats(player, weapon.templateId);
+        }
         this.broadcast('weapon:picked_up', {
           weaponId: data.targetId, playerId: player.id, templateId: weapon.templateId, name: weapon.name,
           attack: template?.attack || 0, magicAttack: template?.magicAttack || 0, critRate: template?.critRate || 0,
         });
       }
+    });
+
+    this.onMessage('player:equip_weapon', (client, data: { templateId: string }) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      const collected = this.playerWeapons.get(client.sessionId);
+      if (!collected || !collected.has(data.templateId)) {
+        client.send('weapon:error', { error: 'Weapon not collected' });
+        return;
+      }
+      if (player.equippedWeapon === data.templateId) return;
+      if (player.equippedWeapon) {
+        this.applyWeaponStats(player, player.equippedWeapon, true);
+      }
+      player.equippedWeapon = data.templateId;
+      this.applyWeaponStats(player, data.templateId);
+      client.send('weapon:equipped', { templateId: data.templateId });
+      this.broadcast('player:weapon_changed', { playerId: player.id, templateId: data.templateId });
     });
 
     this.onMessage('player:chat', (client, data: { message: string; channel: string; target?: string }) => {
@@ -593,14 +663,13 @@ export class WorldRoom extends Room<WorldState> {
 
     for (const [id, aiM] of aiMonsters) {
       if (aiM.state === MonsterAIState.Attack && aiM.targetId && this.monsterAttackCooldown(id, dt)) {
-        const targetPlayer = this.state.players.get(aiM.targetId);
+        const targetPlayer = this.getPlayerByPlayerId(aiM.targetId);
         if (targetPlayer) {
           const rawDamage = aiM.level * 2 + Math.random() * 5 - targetPlayer.defense * 0.3;
           const damage = Math.max(1, Math.floor(rawDamage));
           targetPlayer.hp -= damage;
-          this.broadcast('combat:player_damage', { targetId: aiM.targetId, attackerId: id, damage, critical: false });
+          this.broadcast('combat:player_damage', { targetId: aiM.targetId, attackerId: id, damage, critical: false, hp: targetPlayer.hp, maxHp: targetPlayer.maxHp });
           if (targetPlayer.hp <= 0) {
-            targetPlayer.hp = targetPlayer.maxHp;
             this.monsterAttackTimers.set(id, 3.0);
             const monster = this.state.monsters.get(id);
             if (monster) {
@@ -623,6 +692,13 @@ export class WorldRoom extends Room<WorldState> {
     for (const [sessionId] of this.state.players) {
       this.buffSystem.tick(sessionId, dt);
     }
+  }
+
+  private getPlayerByPlayerId(playerId: string): PlayerState | undefined {
+    for (const [, p] of this.state.players) {
+      if (p.id === playerId) return p;
+    }
+    return undefined;
   }
 
   private monsterAttackTimers: Map<string, number> = new Map();
@@ -656,9 +732,19 @@ export class WorldRoom extends Room<WorldState> {
     this.state.players.set(client.sessionId, player);
     this.playerInventories.set(client.sessionId, []);
     this.playerMounts.set(client.sessionId, null);
+    this.playerWeapons.set(client.sessionId, new Set());
+    this.playerWeapons.set(client.sessionId, new Set());
+
+    const monsterTemplates = Object.keys(MONSTER_TEMPLATES);
+    for (let i = 0; i < 5; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 5 + Math.random() * 8;
+      const tid = monsterTemplates[Math.floor(Math.random() * monsterTemplates.length)];
+      if (tid) this.spawnMonster(tid, player.x + Math.cos(angle) * dist, player.z + Math.sin(angle) * dist);
+    }
 
     const templates = Object.keys(WEAPON_TEMPLATES);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 6; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 3 + Math.random() * 5;
       const templateId = templates[Math.floor(Math.random() * templates.length)];
@@ -674,7 +760,7 @@ export class WorldRoom extends Room<WorldState> {
     this.broadcast('player:joined', { id: player.id, name: player.name, x: player.x, z: player.z }, { except: client });
     client.send('world:state', {
       players: Array.from(this.state.players.values()).map((p: PlayerState) => ({ id: p.id, name: p.name, x: p.x, z: p.z, level: p.level, rotation: p.rotation })),
-      monsters: Array.from(this.state.monsters.values()).map((m: MonsterState) => ({ id: m.id, name: m.name, x: m.x, z: m.z, hp: m.hp, maxHp: m.maxHp, level: m.level })),
+      monsters: Array.from(this.state.monsters.values()).map((m: MonsterState) => ({ id: m.id, templateId: m.templateId, name: m.name, x: m.x, z: m.z, hp: m.hp, maxHp: m.maxHp, level: m.level })),
       weapons: Array.from(this.state.weapons.values()).map((w: WeaponState) => ({ id: w.id, templateId: w.templateId, name: w.name, x: w.x, z: w.z })),
       timeOfDay: this.state.timeOfDay,
       weather: this.state.weather,
@@ -689,6 +775,7 @@ export class WorldRoom extends Room<WorldState> {
     this.state.players.delete(client.sessionId);
     this.playerInventories.delete(client.sessionId);
     this.playerMounts.delete(client.sessionId);
+    this.playerWeapons.delete(client.sessionId);
   }
 
   onDispose(): void {

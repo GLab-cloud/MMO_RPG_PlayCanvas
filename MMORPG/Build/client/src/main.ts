@@ -7,6 +7,7 @@ import { PlayerController, NPC_DIALOGS, NPC_INTERACT_RANGE } from './controllers
 import { CameraController } from './controllers/CameraController';
 import { InputController } from './controllers/InputController';
 import { NameplateUI } from './ui/NameplateUI';
+import { AudioManager } from './audio/AudioManager';
 import { config } from './config';
 
 export class GameClient {
@@ -19,6 +20,7 @@ export class GameClient {
   cameraController!: CameraController;
   inputController!: InputController;
   private nameplates!: NameplateUI;
+  private audio: AudioManager = new AudioManager();
   private activeNpcDialog: string | null = null;
   private lastNpcCheck: number = 0;
   running: boolean = false;
@@ -36,6 +38,8 @@ export class GameClient {
   private leaderboardData: { name: string; kills: number; deaths: number }[] = [];
 
   private weaponsInventory: { templateId: string; name: string; attack: number; magicAttack: number; critRate: number }[] = [];
+  private equippedWeaponIndex: number = -1;
+  private currentWeaponType: string = 'fist';
 
   async initialize(canvas: HTMLCanvasElement): Promise<void> {
     this.app = new App();
@@ -68,6 +72,10 @@ export class GameClient {
       npcs: [],
     });
 
+    document.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'BUTTON' || target.closest('button')) this.audio.playButton();
+    });
     this.setupNetworkCallbacks();
     this.setupNameplateCallbacks();
     this.ui.showLobby({
@@ -95,15 +103,20 @@ export class GameClient {
         this.ui.showDamageNumber(x, y, damage, critical);
         this.ui.showCombatFeedback(critical ? 'CRITICAL!' : `Hit! -${damage}`, critical ? '#ff4444' : '#ffaa00');
         this.ui.showAttackFlash();
+        (critical ? this.audio.playCritical() : this.audio.playAttack());
       },
       onMonsterKilled: (monsterId, xp) => {
         this.playerXp += xp;
+        this.audio.playMonsterDeath();
+        this.audio.playXP();
+        this.ui.showCombatFeedback(`+${xp} XP`, '#44ff44', 1000);
         if (this.playerXp >= this.playerXpNext) {
           this.playerXp -= this.playerXpNext;
           this.playerLevel++;
           this.playerXpNext = Math.floor(this.playerXpNext * 1.3);
           this.playerHp = this.playerMaxHp;
           this.playerMp = this.playerMaxMp;
+          this.audio.playLevelUp();
           this.ui.showCombatFeedback(`LEVEL UP! Lv.${this.playerLevel}`, '#44ff44', 1500);
         }
         this.kills++;
@@ -118,9 +131,19 @@ export class GameClient {
         }));
         this.ui.showLeaderboard(this.leaderboardData);
       },
+      onPlayerKilled: (_attackerId, _targetId) => {
+        this.kills++;
+        this.ui.updateScore(this.kills, this.deaths);
+        this.updateLeaderboard();
+      },
       onPlayerDamage: (attackerId, targetId, damage, critical) => {
         const localId = this.network.getStateSync().localPlayerId;
         if (targetId !== localId) {
+          if (attackerId === localId) {
+            this.ui.showAttackFlash();
+            this.ui.showCombatFeedback(critical ? 'CRITICAL!' : `Hit! -${damage}`, critical ? '#ff4444' : '#ffaa00');
+            this.audio.playAttack();
+          }
           this.ui.showDamageNumber(
             window.innerWidth / 2 + (Math.random() - 0.5) * 60,
             window.innerHeight / 2 + (Math.random() - 0.5) * 40,
@@ -128,7 +151,9 @@ export class GameClient {
           );
           return;
         }
+        if (this.playerHp <= 0) return;
         this.playerHp -= damage;
+        this.audio.playPlayerHit();
         this.ui.showHitFlash();
         const x = window.innerWidth / 2 + (Math.random() - 0.5) * 40;
         const y = window.innerHeight / 2 + (Math.random() - 0.5) * 30;
@@ -137,10 +162,13 @@ export class GameClient {
 
         if (this.playerHp <= 0) {
           this.playerHp = 0;
+          this.audio.playDeath();
           this.deaths++;
           this.ui.updateScore(this.kills, this.deaths);
           this.updateLeaderboard();
-          this.ui.showDeathScreen();
+          const killedBy = attackerId === localId ? 'yourself' : attackerId.startsWith('monster_') ? 'a monster' : `player ${attackerId.slice(-4)}`;
+          this.ui.showDeathScreen(killedBy);
+          this.playerController.die();
         }
       },
     });
@@ -187,6 +215,30 @@ export class GameClient {
     stateSync.onPlayerHPUpdate = (id, hp, maxHp) => {
       const pct = maxHp > 0 ? hp / maxHp : 1;
       this.nameplates.updateNameplateHP(id, pct);
+      const localId = this.network.getStateSync().localPlayerId;
+      if (id === localId) {
+        this.nameplates.updateNameplateHP('local', pct);
+      } else {
+        if (hp <= 0) stateSync['playerDied'](id);
+        else if (maxHp > 0 && stateSync['deadPlayers']?.has(id)) stateSync['playerRevived'](id);
+      }
+    };
+    stateSync.onPlayerXPUpdate = (id, xp, xpNext) => {
+      this.nameplates.updateNameplateXP(id, xp, xpNext);
+    };
+  }
+
+  private setupMonsterNameplateCallbacks(): void {
+    const stateSync = this.network.getStateSync();
+    stateSync.onMonsterAdded = (id, name) => {
+      this.nameplates.addMonsterNameplate(id, name);
+    };
+    stateSync.onMonsterRemoved = (id) => {
+      this.nameplates.removeMonsterNameplate(id);
+    };
+    stateSync.onMonsterHPUpdate = (id, hp, maxHp) => {
+      const pct = maxHp > 0 ? hp / maxHp : 1;
+      this.nameplates.updateNameplateHP(id, pct);
     };
   }
 
@@ -203,9 +255,16 @@ export class GameClient {
       },
       onMatchStarting: (matchId) => this.onMatchStarting(matchId),
       onError: (message) => console.error('Network error:', message),
-      onLobbyConnected: () => console.log('Lobby connected'),
+      onLobbyConnected: () => {
+        console.log('Lobby connected');
+        this.audio.startLobbyBGM();
+      },
       onWorldConnected: () => console.log('World connected'),
-      onDisconnected: () => console.log('Disconnected'),
+      onDisconnected: () => {
+        console.log('Disconnected');
+        this.audio.stopBGM();
+        this.audio.startLobbyBGM();
+      },
     });
   }
 
@@ -216,6 +275,7 @@ export class GameClient {
     this.playerController = new PlayerController(
       this.pcApp, this.network, this.inputController, this.cameraController
     );
+    this.playerController.onCombatFeedback = (text, color, duration) => this.ui.showCombatFeedback(text, color, duration);
     this.playerController.setPanelToggleCallback((panel: string) => {
       if (panel === 'leaderboard') {
         this.ui.toggleLeaderboard();
@@ -224,6 +284,8 @@ export class GameClient {
         this.toggleInventory();
       }
     });
+    this.setupMonsterNameplateCallbacks();
+
     this.network.onWeaponPickup = (data) => {
       const localId = this.network.getStateSync().localPlayerId;
       if (data.playerId !== localId) return;
@@ -234,11 +296,29 @@ export class GameClient {
         magicAttack: data.magicAttack,
         critRate: data.critRate,
       });
+      this.audio.playPickup();
+      this.ui.showCombatFeedback(`Picked up ${data.name}!`, '#44aaff', 1000);
+      if (this.equippedWeaponIndex === -1) {
+        this.equipWeapon(this.weaponsInventory.length - 1);
+      }
+    };
+
+    this.ui.setOnRespawn(() => {
+      this.audio.playRespawn();
+      this.playerController.respawn();
+      this.playerHp = this.playerMaxHp;
+      this.playerMp = this.playerMaxMp;
+      this.network.sendToWorld('player:respawn', {});
+    });
+    this.network.onRespawnedCallback = (x, z) => {
+      this.playerController.getPlayer().setLocalPosition(x, 2, z);
     };
 
     this.sceneManager.loadScene('Flarine');
     this.nameplates.addNameplate('local', this.ui.getPlayerName(), true);
     await this.network.joinWorldRoom(matchId);
+    this.audio.stopBGM();
+    this.audio.startBGM();
     this.sendPlayerName(name);
   }
 
@@ -262,8 +342,6 @@ export class GameClient {
   }
 
   update(dt: number): void {
-    this.inputController.resetDeltas();
-
     if (this.network.state === 'world' && this.playerController) {
       this.playerController.update(dt);
       this.cameraController.update(dt);
@@ -282,6 +360,7 @@ export class GameClient {
       this.updateWeaponPickupHint();
       this.updateNameplates();
     }
+    this.inputController.resetDeltas();
   }
 
   private updateNpcDialog(): void {
@@ -336,17 +415,41 @@ export class GameClient {
       };
       const color = colors[w.templateId] || '#94a3b8';
       const icon = icons[w.templateId] || '\u2694\uFE0F';
+      const isEquipped = i === this.equippedWeaponIndex;
       let stats = `<div class="inv-item-stat">ATK <span>${w.attack}</span></div>`;
       if (w.magicAttack > 0) stats += `<div class="inv-item-stat">MATK <span>${w.magicAttack}</span></div>`;
       if (w.critRate > 0) stats += `<div class="inv-item-stat">CRIT <span>${(w.critRate * 100).toFixed(0)}%</span></div>`;
-      return `<div class="inv-item">
+      return `<div class="inv-item ${isEquipped ? 'inv-equipped' : ''}" data-index="${i}">
         <div class="inv-item-icon" style="background:${color}22;color:${color}">${icon}</div>
         <div class="inv-item-info">
-          <div class="inv-item-name">${w.name}</div>
+          <div class="inv-item-name">${w.name}${isEquipped ? ' (Equipped)' : ''}</div>
           <div class="inv-item-stats">${stats}</div>
         </div>
       </div>`;
     }).join('');
+    list.querySelectorAll('.inv-item').forEach((el) => {
+      el.addEventListener('click', () => {
+        const index = parseInt(el.getAttribute('data-index') || '0', 10);
+        this.equipWeapon(index);
+      });
+    });
+  }
+
+  private equipWeapon(index: number): void {
+    if (index < 0 || index >= this.weaponsInventory.length) return;
+    if (this.equippedWeaponIndex >= 0 && this.equippedWeaponIndex < this.weaponsInventory.length) {
+      const oldWeapon = this.weaponsInventory[this.equippedWeaponIndex];
+      this.playerAtk -= oldWeapon.attack;
+    }
+    this.equippedWeaponIndex = index;
+    const weapon = this.weaponsInventory[index];
+    this.playerAtk += weapon.attack;
+    this.currentWeaponType = weapon.templateId;
+    this.playerController.setWeaponType(weapon.templateId);
+    this.network.sendToWorld('player:equip_weapon', { templateId: weapon.templateId });
+    this.audio.playEquip();
+    this.ui.showCombatFeedback(`Equipped ${weapon.name}!`, '#ffaa00', 1000);
+    this.renderInventory();
   }
 
   private updateWeaponPickupHint(): void {
@@ -370,8 +473,11 @@ export class GameClient {
 
     const localPos = this.playerController.getPlayer().getLocalPosition();
     positions.push({ id: 'local', x: localPos.x, y: localPos.y + 2.8, z: localPos.z });
-    this.nameplates.updateNameplateXP(this.playerXp, this.playerXpNext);
+    this.nameplates.updateNameplateXP('local', this.playerXp, this.playerXpNext);
     this.nameplates.updateNameplateHP('local', this.playerMaxHp > 0 ? this.playerHp / this.playerMaxHp : 1);
+
+    const monsterPositions = stateSync.getAllMonsterPositions();
+    positions.push(...monsterPositions);
 
     const cam = cameraEntity.camera!;
     this.nameplates.updatePositions(positions, (x, y, z) => {

@@ -159,9 +159,10 @@ export class UIManager {
     setTimeout(() => el.remove(), 300);
   }
 
-  showDeathScreen(): void {
+  showDeathScreen(killedBy: string = 'an enemy'): void {
     this.deathScreen.innerHTML = `
       <h1>YOU DIED</h1>
+      <p>Killed by ${killedBy}</p>
       <p>Kills: ${this.kills} | Deaths: ${this.deaths}</p>
       <button class="btn btn-primary" id="respawn-btn">Respawn</button>
     `;

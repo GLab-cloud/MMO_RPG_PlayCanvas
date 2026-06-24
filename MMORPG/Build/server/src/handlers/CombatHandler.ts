@@ -10,17 +10,19 @@ export class CombatHandler {
     player: { id: string; x: number; z: number; level: number; attack: number; magicAttack: number; defense: number; dexterity: number },
     targetMonster: { id: string; x: number; z: number; hp: number; maxHp: number; defense: number; magicDefense: number; level: number },
     monsters: Map<string, any>,
-    lootSpawns: Map<string, any>
+    lootSpawns: Map<string, any>,
+    weaponType: string = 'melee'
   ): { monsterId: string; damage: number; critical: boolean; killed: boolean; xpReward?: number } {
     const dist = distance(player.x, player.z, targetMonster.x, targetMonster.z);
-    if (dist > 5) {
+    if (dist > 6) {
       return { monsterId: targetMonster.id, damage: 0, critical: false, killed: false };
     }
     const critical = isCriticalHit(player.dexterity);
     const critMult = critical ? 2.0 : 1.0;
-    const physicalDmg = calculatePhysical(player.attack, targetMonster.defense, player.level, targetMonster.level, 1.0) * critMult;
+    const effectiveAttack = weaponType === 'magic' ? player.magicAttack : player.attack;
+    const physicalDmg = calculatePhysical(effectiveAttack, targetMonster.defense, player.level, targetMonster.level, 1.0) * critMult;
     const magicalDmg = calculateMagical(player.magicAttack, targetMonster.magicDefense, player.level, targetMonster.level, 0.3);
-    const totalDamage = Math.floor(physicalDmg + magicalDmg);
+    const totalDamage = Math.max(1, Math.floor(physicalDmg + magicalDmg));
     targetMonster.hp -= totalDamage;
     if (targetMonster.hp <= 0) {
       targetMonster.hp = 0;
@@ -45,7 +47,7 @@ export class CombatHandler {
     target: { x: number; z: number; level: number; defense: number; hp: number; maxHp: number }
   ): { damage: number; critical: boolean; killed: boolean } {
     const dist = distance(attacker.x, attacker.z, target.x, target.z);
-    if (dist > 5) {
+    if (dist > 6) {
       return { damage: 0, critical: false, killed: false };
     }
     const critical = isCriticalHit(attacker.dexterity);

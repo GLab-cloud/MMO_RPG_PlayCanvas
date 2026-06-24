@@ -1,3 +1,4 @@
 .pcconfig
+.env
 /MMORPG/node_modules
 /MMORPG/models/

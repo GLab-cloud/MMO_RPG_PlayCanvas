@@ -105,7 +105,7 @@ export class InputController {
       return;
     }
 
-    if (_e.button === 0 && document.pointerLockElement) {
+    if (_e.button === 0) {
       this.attackClicked = true;
       this.callbackAttack?.();
     }
