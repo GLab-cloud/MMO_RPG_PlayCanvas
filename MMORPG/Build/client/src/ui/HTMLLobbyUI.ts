@@ -2,7 +2,7 @@ import { MatchInfo } from '../network/NetworkManager';
 import { InputController } from '../controllers/InputController';
 
 export interface HTMLLobbyCallbacks {
-  onCreateMatch(name: string, map: string, maxPlayers: number, playerName: string): void;
+  onCreateMatch(name: string, map: string, maxPlayers: number, playerName: string, difficulty: string): void;
   onJoinMatch(matchId: string, playerName: string): void;
   onLeaveMatch(matchId: string): void;
   onStartMatch(matchId: string): void;
@@ -130,7 +130,7 @@ export class HTMLLobbyUI {
         const map = (document.getElementById('map-select') as HTMLSelectElement).value || 'Flarine';
         const maxPlayers = parseInt((document.getElementById('max-players') as HTMLSelectElement).value) || 4;
         const playerName = this.getPlayerName();
-        this.callbacks?.onCreateMatch(name, map, maxPlayers, playerName);
+        this.callbacks?.onCreateMatch(name, map, maxPlayers, playerName, 'easy');
       });
     }
 

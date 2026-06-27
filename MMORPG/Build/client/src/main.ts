@@ -23,6 +23,13 @@ export class GameClient {
   private audio: AudioManager = new AudioManager();
   private activeNpcDialog: string | null = null;
   private lastNpcCheck: number = 0;
+  private previousNpcDialog: string | null = null;
+  private readonly NPC_TYPE_MAP: Record<string, string> = {
+    'Weapon Merchant': 'shop', 'Armor Merchant': 'shop', 'Magic Merchant': 'shop',
+    'Storage Keeper': 'storage', 'Quest Guide': 'quest', 'Skill Master': 'skill',
+    'Class Master': 'class', 'Transport NPC': 'transport', 'Banker': 'bank',
+    'Guard NPC': 'guard',
+  };
   running: boolean = false;
   private playerHp: number = 100;
   private playerMaxHp: number = 100;
@@ -79,16 +86,24 @@ export class GameClient {
     this.setupNetworkCallbacks();
     this.setupNameplateCallbacks();
     this.ui.showLobby({
-      onCreateMatch: (name, map, maxPlayers, playerName) => {
+      onCreateMatch: (name, map, maxPlayers, playerName, difficulty) => {
         this.ui.setPlayerName(playerName);
-        this.network.sendToLobby('create_match', { name, map, maxPlayers });
+        this.audio.playUiMatchCreate();
+        this.network.sendToLobby('create_match', { name, map, maxPlayers, difficulty });
       },
       onJoinMatch: (matchId, playerName) => {
         this.ui.setPlayerName(playerName);
+        this.audio.playUiMatchJoin();
         this.network.sendToLobby('join_match', { matchId });
       },
-      onLeaveMatch: (matchId) => this.network.sendToLobby('leave_match', { matchId }),
-      onStartMatch: (matchId) => this.network.sendToLobby('start_match', { matchId }),
+      onLeaveMatch: (matchId) => {
+        this.audio.playUiMatchLeave();
+        this.network.sendToLobby('leave_match', { matchId });
+      },
+      onStartMatch: (matchId) => {
+        this.audio.playUiMatchStart();
+        this.network.sendToLobby('start_match', { matchId });
+      },
       onExitGame: () => this.exitGame(),
     });
 
@@ -166,8 +181,7 @@ export class GameClient {
           this.deaths++;
           this.ui.updateScore(this.kills, this.deaths);
           this.updateLeaderboard();
-          const killedBy = attackerId === localId ? 'yourself' : attackerId.startsWith('monster_') ? 'a monster' : `player ${attackerId.slice(-4)}`;
-          this.ui.showDeathScreen(killedBy);
+          this.ui.showDeathScreen('an enemy');
           this.playerController.die();
         }
       },
@@ -253,7 +267,7 @@ export class GameClient {
         console.log('Joined match:', matchId);
         this.ui.setMyMatchId(matchId);
       },
-      onMatchStarting: (matchId) => this.onMatchStarting(matchId),
+      onMatchStarting: (matchId, difficulty) => this.onMatchStarting(matchId, difficulty),
       onError: (message) => console.error('Network error:', message),
       onLobbyConnected: () => {
         console.log('Lobby connected');
@@ -268,7 +282,7 @@ export class GameClient {
     });
   }
 
-  private async onMatchStarting(matchId: string): Promise<void> {
+  private async onMatchStarting(matchId: string, difficulty?: string): Promise<void> {
     const name = this.ui.getPlayerName();
     this.ui.setPlayerName(name);
     this.ui.showWorld();
@@ -280,6 +294,7 @@ export class GameClient {
       if (panel === 'leaderboard') {
         this.ui.toggleLeaderboard();
         this.updateLeaderboard();
+        this.audio.playUiPanelOpen();
       } else if (panel === 'inventory') {
         this.toggleInventory();
       }
@@ -310,13 +325,17 @@ export class GameClient {
       this.playerMp = this.playerMaxMp;
       this.network.sendToWorld('player:respawn', {});
     });
+    this.ui.setOnDifficultyChange((difficulty) => {
+      this.network.sendToWorld('player:set_difficulty', { difficulty });
+    });
     this.network.onRespawnedCallback = (x, z) => {
       this.playerController.getPlayer().setLocalPosition(x, 2, z);
     };
 
     this.sceneManager.loadScene('Flarine');
+    this.playerController.sceneName = 'Flarine';
     this.nameplates.addNameplate('local', this.ui.getPlayerName(), true);
-    await this.network.joinWorldRoom(matchId);
+    await this.network.joinWorldRoom(matchId, difficulty);
     this.audio.stopBGM();
     this.audio.startBGM();
     this.sendPlayerName(name);
@@ -375,6 +394,10 @@ export class GameClient {
     if (nearestNpc) {
       const messages = NPC_DIALOGS[nearestNpc];
       if (messages) {
+        if (this.previousNpcDialog !== nearestNpc) {
+          this.previousNpcDialog = nearestNpc;
+          this.audio.playNpcDialog(this.NPC_TYPE_MAP[nearestNpc] || 'default');
+        }
         this.activeNpcDialog = nearestNpc;
         nameEl.textContent = nearestNpc;
         textEl.textContent = messages[Math.floor(Math.random() * messages.length)];
@@ -382,6 +405,7 @@ export class GameClient {
       }
     } else if (this.activeNpcDialog) {
       this.activeNpcDialog = null;
+      this.previousNpcDialog = null;
       dialogEl.style.display = 'none';
     }
   }
@@ -392,8 +416,10 @@ export class GameClient {
     if (overlay.style.display === 'none') {
       this.renderInventory();
       overlay.style.display = 'flex';
+      this.audio.playUiPanelOpen();
     } else {
       overlay.style.display = 'none';
+      this.audio.playUiPanelClose();
     }
   }
 

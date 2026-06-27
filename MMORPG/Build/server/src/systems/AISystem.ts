@@ -9,8 +9,17 @@ export enum MonsterState {
   Return = 'return',
 }
 
+interface AIMonster {
+  id: string; x: number; z: number; level: number;
+  hp: number; maxHp: number;
+  aggroRange: number; attackRange: number; moveSpeed: number;
+  state: MonsterState; targetId: string | null;
+  fleeThreshold: number;
+  patrolPoint: { x: number; z: number };
+}
+
 export class AISystem {
-  update(monsters: Map<string, { id: string; x: number; z: number; level: number; hp: number; maxHp: number; aggroRange: number; attackRange: number; moveSpeed: number; state: MonsterState; targetId: string | null; patrolPoint: { x: number; z: number } }>, players: Map<string, { id: string; x: number; z: number; level: number }>, _deltaTime: number): void {
+  update(monsters: Map<string, AIMonster>, players: Map<string, { id: string; x: number; z: number; level: number; equippedWeapon: string }>, _deltaTime: number): void {
     for (const [monsterId, monster] of monsters) {
       if (monster.hp <= 0) continue;
 
@@ -39,10 +48,11 @@ export class AISystem {
 
   private findNearestPlayer(
     monster: { x: number; z: number; aggroRange: number },
-    players: Map<string, { id: string; x: number; z: number; level: number }>
+    players: Map<string, { id: string; x: number; z: number; level: number; equippedWeapon: string }>
   ): { id: string; dist: number } | null {
     let nearest: { id: string; dist: number } | null = null;
     for (const [id, player] of players) {
+      if (!player.equippedWeapon) continue;
       const dist = distance(monster.x, monster.z, player.x, player.z);
       if (dist <= monster.aggroRange && (!nearest || dist < nearest.dist)) {
         nearest = { id, dist };
@@ -52,9 +62,10 @@ export class AISystem {
   }
 
   private handleIdle(
-    monster: { state: MonsterState; targetId: string | null; aggroRange: number; x: number; z: number },
-    players: Map<string, { id: string; x: number; z: number; level: number }>
+    monster: { state: MonsterState; targetId: string | null; aggroRange: number; x: number; z: number; hp: number; maxHp: number; fleeThreshold: number },
+    players: Map<string, { id: string; x: number; z: number; level: number; equippedWeapon: string }>
   ): void {
+    if (this.shouldFlee(monster)) return;
     const nearest = this.findNearestPlayer(monster, players);
     if (nearest) {
       monster.state = MonsterState.Chase;
@@ -62,14 +73,19 @@ export class AISystem {
     }
   }
 
+  private shouldFlee(monster: { hp: number; maxHp: number; fleeThreshold: number }): boolean {
+    return monster.fleeThreshold > 0 && monster.maxHp > 0 && monster.hp / monster.maxHp < monster.fleeThreshold;
+  }
+
   private handleChase(
-    monster: { state: MonsterState; targetId: string | null; x: number; z: number; moveSpeed: number; attackRange: number },
-    players: Map<string, { id: string; x: number; z: number; level: number }>
+    monster: { state: MonsterState; targetId: string | null; x: number; z: number; moveSpeed: number; attackRange: number; hp: number; maxHp: number; fleeThreshold: number },
+    players: Map<string, { id: string; x: number; z: number; level: number; equippedWeapon: string }>
   ): void {
     if (!monster.targetId) {
       monster.state = MonsterState.Idle;
       return;
     }
+    if (this.shouldFlee(monster)) { monster.state = MonsterState.Flee; return; }
     const player = players.get(monster.targetId);
     if (!player) {
       monster.state = MonsterState.Return;
@@ -89,10 +105,11 @@ export class AISystem {
   }
 
   private handleAttack(
-    monster: { state: MonsterState; targetId: string | null; x: number; z: number; attackRange: number },
-    players: Map<string, { id: string; x: number; z: number; level: number }>
+    monster: { state: MonsterState; targetId: string | null; x: number; z: number; attackRange: number; hp: number; maxHp: number; fleeThreshold: number },
+    players: Map<string, { id: string; x: number; z: number; level: number; equippedWeapon: string }>
   ): void {
     if (!monster.targetId) { monster.state = MonsterState.Idle; return; }
+    if (this.shouldFlee(monster)) { monster.state = MonsterState.Flee; return; }
     const player = players.get(monster.targetId);
     if (!player) { monster.state = MonsterState.Return; monster.targetId = null; return; }
     const dist = distance(monster.x, monster.z, player.x, player.z);
@@ -102,25 +119,22 @@ export class AISystem {
   }
 
   private handleFlee(
-    monster: { state: MonsterState; x: number; z: number; moveSpeed: number },
-    players: Map<string, { id: string; x: number; z: number; level: number }>
+    monster: { state: MonsterState; x: number; z: number; moveSpeed: number; hp: number; maxHp: number; fleeThreshold: number },
+    players: Map<string, { id: string; x: number; z: number; level: number; equippedWeapon: string }>
   ): void {
+    if (!this.shouldFlee(monster)) { monster.state = MonsterState.Return; return; }
     const nearest = this.findNearestPlayer(monster as any, players);
-    if (!nearest) {
-      monster.state = MonsterState.Idle;
-      return;
-    }
+    if (!nearest) { monster.state = MonsterState.Return; return; }
     const player = players.get(nearest.id);
-    if (!player) {
-      monster.state = MonsterState.Idle;
-      return;
-    }
+    if (!player) { monster.state = MonsterState.Return; return; }
+    const dist = distance(monster.x, monster.z, player.x, player.z);
+    if (dist > 30) { monster.state = MonsterState.Return; return; }
     const dx = monster.x - player.x;
     const dz = monster.z - player.z;
     const len = Math.sqrt(dx * dx + dz * dz);
     if (len > 0) {
-      monster.x += (dx / len) * monster.moveSpeed;
-      monster.z += (dz / len) * monster.moveSpeed;
+      monster.x += (dx / len) * monster.moveSpeed * 1.5;
+      monster.z += (dz / len) * monster.moveSpeed * 1.5;
     }
   }
 

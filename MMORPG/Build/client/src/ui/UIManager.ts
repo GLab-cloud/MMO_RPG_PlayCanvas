@@ -8,6 +8,10 @@ interface ScoreEntry {
   deaths: number;
 }
 
+export const DIFFICULTY_LEVELS = ['easy', 'medium', 'hard', 'hardest'] as const;
+export type Difficulty = (typeof DIFFICULTY_LEVELS)[number];
+const DIFFICULTY_LABELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', hardest: 'Hardest' };
+
 export interface LobbyUICallbacks extends HTMLLobbyCallbacks {}
 
 export class UIManager {
@@ -29,11 +33,13 @@ export class UIManager {
   private leaderboardEl: HTMLElement;
   private leaderboardList: HTMLElement;
   private deathScreen: HTMLElement;
+  private difficultySelect: HTMLSelectElement;
   private playerName: string = 'Player';
   private kills: number = 0;
   private deaths: number = 0;
   private leaderboardEntries: ScoreEntry[] = [];
   private onRespawn: (() => void) | null = null;
+  private onDifficultyChange: ((difficulty: Difficulty) => void) | null = null;
 
   constructor() {
     this.htmlLobby = new HTMLLobbyUI();
@@ -53,6 +59,13 @@ export class UIManager {
     this.helpText = document.getElementById('help-text')!;
     this.leaderboardEl = document.getElementById('leaderboard')!;
     this.leaderboardList = document.getElementById('leaderboard-list')!;
+    this.difficultySelect = document.getElementById('difficulty-select') as HTMLSelectElement;
+    this.difficultySelect.addEventListener('change', () => {
+      const val = this.difficultySelect.value as Difficulty;
+      if (val && DIFFICULTY_LEVELS.includes(val)) {
+        this.onDifficultyChange?.(val);
+      }
+    });
     this.deathScreen = document.createElement('div');
     this.deathScreen.id = 'death-screen';
     this.deathScreen.style.display = 'none';
@@ -175,6 +188,16 @@ export class UIManager {
 
   setOnRespawn(cb: () => void): void {
     this.onRespawn = cb;
+  }
+
+  setOnDifficultyChange(cb: (difficulty: Difficulty) => void): void {
+    this.onDifficultyChange = cb;
+  }
+
+  setDifficulty(difficulty: string): void {
+    if (DIFFICULTY_LEVELS.includes(difficulty as Difficulty)) {
+      this.difficultySelect.value = difficulty;
+    }
   }
 
   showLeaderboard(entries: ScoreEntry[]): void {

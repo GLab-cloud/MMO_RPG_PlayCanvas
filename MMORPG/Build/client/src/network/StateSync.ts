@@ -14,6 +14,9 @@ interface TrackedEntity {
   templateId?: string;
   glowEntity?: pc.Entity;
   _savedScale?: pc.Vec3;
+  aiState?: string;
+  aggroIndicator?: pc.Entity;
+  attackPulseTimer?: number;
 }
 
 const INTERPOLATION_BUFFER_MS = 100;
@@ -30,6 +33,7 @@ export class StateSync {
   onMonsterAdded: ((id: string, name: string) => void) | null = null;
   onMonsterRemoved: ((id: string) => void) | null = null;
   onMonsterHPUpdate: ((id: string, hp: number, maxHp: number) => void) | null = null;
+  onMonsterStateChange: ((id: string, state: string) => void) | null = null;
   private deadPlayers: Set<string> = new Set();
 
   constructor(app: pc.Application) {
@@ -54,6 +58,32 @@ export class StateSync {
     }
   }
 
+  private updateAggroIndicator(tracked: TrackedEntity): void {
+    const isAggro = tracked.aiState === 'chase' || tracked.aiState === 'attack';
+    if (isAggro && !tracked.aggroIndicator) {
+      tracked.aggroIndicator = new pc.Entity(`${tracked.id}-aggro`);
+      tracked.aggroIndicator.addComponent('render', {
+        type: 'cone',
+        material: (() => {
+          const m = new pc.StandardMaterial();
+          m.diffuse = new pc.Color(1, 0.15, 0.15);
+          m.emissive = new pc.Color(1, 0.1, 0.1);
+          m.metalness = 0; m.update();
+          return m;
+        })(),
+      });
+      tracked.aggroIndicator.setLocalScale(0.4, 0.25, 0.4);
+      tracked.aggroIndicator.setLocalPosition(0, 1.1, 0);
+      tracked.entity.addChild(tracked.aggroIndicator);
+    } else if (!isAggro && tracked.aggroIndicator) {
+      tracked.aggroIndicator.destroy();
+      tracked.aggroIndicator = undefined;
+    }
+    if (tracked.aiState === 'attack') {
+      tracked.attackPulseTimer = 0.3;
+    }
+  }
+
   syncMonsterState(monsters: any[]): void {
     for (const m of monsters) {
       const tracked = this.entities.get(m.id);
@@ -61,6 +91,11 @@ export class StateSync {
         tracked.lastPosition.copy(tracked.entity.getLocalPosition());
         tracked.targetPosition.set(m.x ?? 0, 0.5, m.z ?? 0);
         tracked.lastUpdate = Date.now();
+        const newState = m.state ?? 'idle';
+        if (newState !== tracked.aiState) {
+          tracked.aiState = newState;
+          this.updateAggroIndicator(tracked);
+        }
         this.onMonsterHPUpdate?.(m.id, m.hp ?? 0, m.maxHp ?? 1);
       } else if (!tracked) {
         this.addMonster(m.id, m);
@@ -606,6 +641,14 @@ export class StateSync {
       if (tracked.type === 'player') {
         const rot = tracked.lastRotation + (tracked.targetRotation - tracked.lastRotation) * t;
         tracked.entity.setLocalEulerAngles(0, rot, 0);
+      } else if (tracked.type === 'monster') {
+        if (tracked.aiState === 'attack') {
+          const pulse = 1 + Math.sin(now * 0.015) * 0.12;
+          tracked.entity.setLocalScale(pulse, pulse, pulse);
+        } else if (tracked.attackPulseTimer !== undefined) {
+          tracked.attackPulseTimer = undefined;
+          tracked.entity.setLocalScale(1, 1, 1);
+        }
       } else if (tracked.type === 'weapon') {
         const angles = tracked.entity.getLocalEulerAngles();
         tracked.entity.setLocalEulerAngles(0, this.weaponTime * 30, -25);

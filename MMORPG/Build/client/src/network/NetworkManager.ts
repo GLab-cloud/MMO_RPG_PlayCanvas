@@ -19,7 +19,7 @@ export interface LobbyCallbacks {
   onMatchList(matches: MatchInfo[]): void;
   onMatchCreated(matchId: string): void;
   onMatchJoined(matchId: string): void;
-  onMatchStarting(matchId: string): void;
+  onMatchStarting(matchId: string, difficulty?: string): void;
   onError(message: string): void;
   onLobbyConnected(): void;
   onWorldConnected(): void;
@@ -31,6 +31,7 @@ export interface CombatCallbacks {
   onMonsterKilled(monsterId: string, xp: number): void;
   onPlayerDamage(attackerId: string, targetId: string, damage: number, critical: boolean): void;
   onPlayerKilled?(attackerId: string, targetId: string): void;
+  onPlayerKilledByMonster?(attackerName: string): void;
   onScoreUpdate?(players: { id: string; name: string; kills: number; deaths: number; level: number }[]): void;
 }
 
@@ -102,14 +103,14 @@ export class NetworkManager {
     }
   }
 
-  async joinWorldRoom(matchId: string): Promise<void> {
+  async joinWorldRoom(matchId: string, difficulty?: string): Promise<void> {
     if (this.lobbyRoom) {
       this.lobbyRoom.leave();
       this.lobbyRoom = null;
     }
 
     try {
-      this.worldRoom = await this.client.joinOrCreate('world', { matchId });
+      this.worldRoom = await this.client.joinOrCreate('world', { matchId, difficulty: difficulty || 'easy' });
       this.setupWorldHandlers();
       this._state = 'world';
       this.reconnectAttempts = 0;
@@ -177,8 +178,8 @@ export class NetworkManager {
       this.callbacks?.onMatchJoined(data.matchId);
     });
 
-    this.lobbyRoom.onMessage('match_starting', (data: { matchId: string }) => {
-      this.callbacks?.onMatchStarting(data.matchId);
+    this.lobbyRoom.onMessage('match_starting', (data: { matchId: string; difficulty?: string }) => {
+      this.callbacks?.onMatchStarting(data.matchId, data.difficulty);
     });
 
     this.lobbyRoom.onMessage('error', (data: { message: string }) => {
@@ -201,7 +202,7 @@ export class NetworkManager {
 
     this.worldRoom.onStateChange((state) => {
       const monsters = Array.from((state as any).monsters?.values() || []).map((m: any) => ({
-        id: m.id, name: m.name, x: m.x, z: m.z, hp: m.hp, maxHp: m.maxHp, level: m.level,
+        id: m.id, name: m.name, x: m.x, z: m.z, hp: m.hp, maxHp: m.maxHp, level: m.level, state: m.state,
       }));
       this.stateSync.syncMonsterState(monsters);
 
@@ -268,10 +269,13 @@ export class NetworkManager {
       this.stateSync.onPlayerHPUpdate?.(data.targetId, data.hp, data.maxHp);
     });
 
-    this.worldRoom.onMessage('pvp:kill', (data: { targetId: string; attackerId: string }) => {
+    this.worldRoom.onMessage('monster:kill', (data: { targetId: string; attackerId: string; attackerName: string }) => {
       if (data.targetId === this.stateSync.localPlayerId) {
-        this.combatCallbacks?.onPlayerDamage(data.attackerId, data.targetId, 9999, false);
+        this.combatCallbacks?.onPlayerKilledByMonster?.(data.attackerName);
       }
+    });
+
+    this.worldRoom.onMessage('pvp:kill', (data: { targetId: string; attackerId: string }) => {
       if (data.attackerId === this.stateSync.localPlayerId) {
         this.combatCallbacks?.onPlayerKilled?.(data.attackerId, data.targetId);
       }

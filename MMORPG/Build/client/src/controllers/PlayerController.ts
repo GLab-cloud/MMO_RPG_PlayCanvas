@@ -7,6 +7,7 @@ import { CombatComponent } from '../components/CombatComponent';
 import { MountEntity } from '../entities/MountEntity';
 import { StateSync } from '../network/StateSync';
 import { config } from '../config';
+import { collidesWithWorld } from '../physics/CollisionZones';
 
 const COLLISION_RADIUS = 1.0;
 const NPC_INTERACT_RANGE = 4.0;
@@ -44,6 +45,7 @@ export class PlayerController {
   private bodyParts: pc.Entity[] = [];
   private targetDirection: number = 0;
   private lastTargetPos: { x: number; z: number } | null = null;
+  sceneName: string = 'Flarine';
 
   constructor(app: pc.Application, network: NetworkManager, input: InputController, camera: CameraController) {
     this.app = app;
@@ -367,6 +369,7 @@ export class PlayerController {
       const dist = Math.sqrt(dx * dx + dz * dz);
       if (dist < COLLISION_RADIUS) return true;
     }
+    if (collidesWithWorld(x, z, this.sceneName)) return true;
     return false;
   }
 

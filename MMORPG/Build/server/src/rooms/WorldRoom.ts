@@ -25,17 +25,40 @@ import { generateId } from '../utils/Helpers.js';
 import { config } from '../config.js';
 import { hpFromStats, mpFromStats } from '../utils/Formulas.js';
 
-const MONSTER_TEMPLATES: Record<string, any> = {
-  rat: { name: 'Rat', level: 1, hp: 30, maxHp: 30, attack: 5, defense: 2, magicAttack: 0, magicDefense: 1, speed: 2, aggroRange: 8, attackRange: 1.5, xpReward: 15 },
-  wolf: { name: 'Wolf', level: 5, hp: 80, maxHp: 80, attack: 12, defense: 5, magicAttack: 0, magicDefense: 2, speed: 4, aggroRange: 12, attackRange: 1.5, xpReward: 40 },
-  bear: { name: 'Bear', level: 10, hp: 200, maxHp: 200, attack: 20, defense: 10, magicAttack: 0, magicDefense: 5, speed: 2.5, aggroRange: 10, attackRange: 2, xpReward: 100 },
-  goblin: { name: 'Goblin', level: 3, hp: 50, maxHp: 50, attack: 8, defense: 3, magicAttack: 2, magicDefense: 3, speed: 3, aggroRange: 10, attackRange: 1.5, xpReward: 25 },
-  orc: { name: 'Orc', level: 8, hp: 150, maxHp: 150, attack: 16, defense: 8, magicAttack: 0, magicDefense: 4, speed: 3, aggroRange: 10, attackRange: 2, xpReward: 70 },
-  troll: { name: 'Troll', level: 15, hp: 400, maxHp: 400, attack: 30, defense: 15, magicAttack: 0, magicDefense: 8, speed: 2, aggroRange: 12, attackRange: 2.5, xpReward: 180 },
-  dragon_whelp: { name: 'Dragon Whelp', level: 20, hp: 500, maxHp: 500, attack: 40, defense: 20, magicAttack: 15, magicDefense: 20, speed: 3.5, aggroRange: 15, attackRange: 3, xpReward: 300 },
-  skeleton: { name: 'Skeleton', level: 7, hp: 100, maxHp: 100, attack: 14, defense: 6, magicAttack: 0, magicDefense: 10, speed: 2.5, aggroRange: 10, attackRange: 1.5, xpReward: 55 },
-  zombie: { name: 'Zombie', level: 6, hp: 120, maxHp: 120, attack: 10, defense: 7, magicAttack: 0, magicDefense: 3, speed: 1.5, aggroRange: 6, attackRange: 1.5, xpReward: 45 },
-  ghost: { name: 'Ghost', level: 12, hp: 100, maxHp: 100, attack: 18, defense: 5, magicAttack: 20, magicDefense: 15, speed: 4, aggroRange: 14, attackRange: 3, xpReward: 130 },
+type DifficultyKey = 'easy' | 'medium' | 'hard' | 'hardest';
+
+const DIFFICULTY_MULTIPLIERS: Record<DifficultyKey, { hp: number; attack: number; speed: number; aggroRange: number; fleeThreshold: number }> = {
+  easy: { hp: 1, attack: 1, speed: 1, aggroRange: 1, fleeThreshold: 0.1 },
+  medium: { hp: 1.5, attack: 1.3, speed: 1.1, aggroRange: 1.1, fleeThreshold: 0.15 },
+  hard: { hp: 2.5, attack: 1.8, speed: 1.2, aggroRange: 1.3, fleeThreshold: 0.2 },
+  hardest: { hp: 4, attack: 2.5, speed: 1.4, aggroRange: 1.5, fleeThreshold: 0 },
+};
+
+function applyDifficulty(base: Record<string, any>, difficulty: DifficultyKey): Record<string, any> {
+  const mult = DIFFICULTY_MULTIPLIERS[difficulty] ?? DIFFICULTY_MULTIPLIERS.easy;
+  return {
+    ...base,
+    difficulty,
+    hp: Math.floor(base.hp * mult.hp),
+    maxHp: Math.floor(base.maxHp * mult.hp),
+    attack: Math.floor(base.attack * mult.attack),
+    speed: base.speed * mult.speed,
+    aggroRange: base.aggroRange * mult.aggroRange,
+    fleeThreshold: mult.fleeThreshold,
+  };
+}
+
+const BASE_MONSTER_TEMPLATES: Record<string, any> = {
+  rat: { name: 'Rat', level: 1, hp: 30, maxHp: 30, attack: 5, defense: 2, magicAttack: 0, magicDefense: 1, speed: 2, aggroRange: 40, attackRange: 1.5, xpReward: 15 },
+  wolf: { name: 'Wolf', level: 5, hp: 80, maxHp: 80, attack: 12, defense: 5, magicAttack: 0, magicDefense: 2, speed: 4, aggroRange: 40, attackRange: 1.5, xpReward: 40 },
+  bear: { name: 'Bear', level: 10, hp: 200, maxHp: 200, attack: 20, defense: 10, magicAttack: 0, magicDefense: 5, speed: 2.5, aggroRange: 40, attackRange: 2, xpReward: 100 },
+  goblin: { name: 'Goblin', level: 3, hp: 50, maxHp: 50, attack: 8, defense: 3, magicAttack: 2, magicDefense: 3, speed: 3, aggroRange: 40, attackRange: 1.5, xpReward: 25 },
+  orc: { name: 'Orc', level: 8, hp: 150, maxHp: 150, attack: 16, defense: 8, magicAttack: 0, magicDefense: 4, speed: 3, aggroRange: 40, attackRange: 2, xpReward: 70 },
+  troll: { name: 'Troll', level: 15, hp: 400, maxHp: 400, attack: 30, defense: 15, magicAttack: 0, magicDefense: 8, speed: 2, aggroRange: 40, attackRange: 2.5, xpReward: 180 },
+  dragon_whelp: { name: 'Dragon Whelp', level: 20, hp: 500, maxHp: 500, attack: 40, defense: 20, magicAttack: 15, magicDefense: 20, speed: 3.5, aggroRange: 40, attackRange: 3, xpReward: 300 },
+  skeleton: { name: 'Skeleton', level: 7, hp: 100, maxHp: 100, attack: 14, defense: 6, magicAttack: 0, magicDefense: 10, speed: 2.5, aggroRange: 40, attackRange: 1.5, xpReward: 55 },
+  zombie: { name: 'Zombie', level: 6, hp: 120, maxHp: 120, attack: 10, defense: 7, magicAttack: 0, magicDefense: 3, speed: 1.5, aggroRange: 40, attackRange: 1.5, xpReward: 45 },
+  ghost: { name: 'Ghost', level: 12, hp: 100, maxHp: 100, attack: 18, defense: 5, magicAttack: 20, magicDefense: 15, speed: 4, aggroRange: 40, attackRange: 3, xpReward: 130 },
 };
 
 const WEAPON_TEMPLATES: Record<string, any> = {
@@ -73,6 +96,7 @@ export class WorldRoom extends Room<WorldState> {
   private levelSystem!: LevelSystem;
   private antiCheat!: AntiCheat;
 
+  private difficulty: DifficultyKey = 'easy';
   private gameLoop!: ReturnType<typeof setInterval>;
   private deltaTime: number = 0;
   private lastTick: number = Date.now();
@@ -94,8 +118,22 @@ export class WorldRoom extends Room<WorldState> {
     if (template.critRate) player.dexterity += Math.round(template.critRate * 100) * sign;
   }
 
-  onCreate(_options: any): void {
+  private triggerMonsterAggro(player: PlayerState): void {
+    for (const [, m] of this.state.monsters) {
+      if (m.hp <= 0) continue;
+      const dx = player.x - m.x;
+      const dz = player.z - m.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist <= m.aggroRange && m.state === 'idle' && !m.targetId) {
+        m.state = MonsterAIState.Chase;
+        m.targetId = player.id;
+      }
+    }
+  }
+
+  onCreate(options: any): void {
     this.setState(new WorldState());
+    this.difficulty = options.difficulty || 'easy';
 
     this.antiCheat = new AntiCheat();
     this.movementHandler = new MovementHandler(this.antiCheat);
@@ -131,8 +169,9 @@ export class WorldRoom extends Room<WorldState> {
   }
 
   private spawnMonster(templateId: string, x: number, z: number): string {
-    const template = MONSTER_TEMPLATES[templateId];
-    if (!template) return '';
+    const base = BASE_MONSTER_TEMPLATES[templateId];
+    if (!base) return '';
+    const template = applyDifficulty(base, this.difficulty);
     const id = generateId();
     const monster = new MonsterState();
     monster.id = id;
@@ -151,6 +190,9 @@ export class WorldRoom extends Room<WorldState> {
     monster.aggroRange = template.aggroRange || 8;
     monster.attackRange = template.attackRange || 1.5;
     monster.xpReward = template.xpReward || 15;
+    monster.fleeThreshold = template.fleeThreshold ?? 0.1;
+    monster.spawnX = x;
+    monster.spawnZ = z;
     this.state.monsters.set(id, monster);
     this.broadcast('monster:spawned', { id, templateId, name: monster.name, x, z, hp: monster.hp, maxHp: monster.maxHp, level: monster.level });
     return id;
@@ -277,6 +319,14 @@ export class WorldRoom extends Room<WorldState> {
         const weaponTemplate = WEAPON_TEMPLATES[player.equippedWeapon];
         const weaponType = weaponTemplate?.type || 'melee';
         const result = this.combatHandler.handleAttack(player, monster, this.state.monsters, this.lootHandler.getLootSpawns(), weaponType);
+        if (!result.killed && monster.hp > 0) {
+          if (monster.hp < monster.maxHp * 0.2) {
+            monster.state = MonsterAIState.Flee;
+          } else if (monster.state !== MonsterAIState.Chase && monster.state !== MonsterAIState.Attack) {
+            monster.state = MonsterAIState.Chase;
+            monster.targetId = player.id;
+          }
+        }
         if (result.killed && result.xpReward) {
           const leveledUp = this.levelSystem.addXp(player.level, player.xp, result.xpReward);
           player.xp = leveledUp.newXp;
@@ -342,6 +392,7 @@ export class WorldRoom extends Room<WorldState> {
           }
           player.equippedWeapon = weapon.templateId;
           this.applyWeaponStats(player, weapon.templateId);
+          this.triggerMonsterAggro(player);
         }
         this.broadcast('weapon:picked_up', {
           weaponId: data.targetId, playerId: player.id, templateId: weapon.templateId, name: weapon.name,
@@ -364,8 +415,17 @@ export class WorldRoom extends Room<WorldState> {
       }
       player.equippedWeapon = data.templateId;
       this.applyWeaponStats(player, data.templateId);
+      this.triggerMonsterAggro(player);
       client.send('weapon:equipped', { templateId: data.templateId });
       this.broadcast('player:weapon_changed', { playerId: player.id, templateId: data.templateId });
+    });
+
+    this.onMessage('player:set_difficulty', (client, data: { difficulty: string }) => {
+      const valid = ['easy', 'medium', 'hard', 'hardest'];
+      if (valid.includes(data.difficulty)) {
+        this.difficulty = data.difficulty as DifficultyKey;
+        client.send('difficulty:changed', { difficulty: this.difficulty });
+      }
     });
 
     this.onMessage('player:chat', (client, data: { message: string; channel: string; target?: string }) => {
@@ -643,12 +703,13 @@ export class WorldRoom extends Room<WorldState> {
         moveSpeed: m.speed,
         state: m.state,
         targetId: m.targetId,
-        patrolPoint: { x: m.x + (Math.random() - 0.5) * 10, z: m.z + (Math.random() - 0.5) * 10 },
+        fleeThreshold: (m as any).fleeThreshold ?? 0.1,
+        patrolPoint: { x: m.spawnX, z: m.spawnZ },
       });
     }
     const aiPlayers = new Map<string, any>();
-    for (const [id, p] of this.state.players) {
-      aiPlayers.set(id, { id: p.id, x: p.x, z: p.z, level: p.level });
+    for (const [, p] of this.state.players) {
+      aiPlayers.set(p.id, { id: p.id, x: p.x, z: p.z, level: p.level, equippedWeapon: p.equippedWeapon });
     }
     this.aiSystem.update(aiMonsters, aiPlayers, dt);
     for (const [id, aiM] of aiMonsters) {
@@ -676,7 +737,7 @@ export class WorldRoom extends Room<WorldState> {
               monster.state = MonsterAIState.Idle;
               monster.targetId = '';
             }
-            this.broadcast('pvp:kill', { targetId: aiM.targetId, attackerId: id });
+            this.broadcast('monster:kill', { targetId: aiM.targetId, attackerId: id, attackerName: monster?.name || 'Monster' });
           }
         }
       }
@@ -735,10 +796,10 @@ export class WorldRoom extends Room<WorldState> {
     this.playerWeapons.set(client.sessionId, new Set());
     this.playerWeapons.set(client.sessionId, new Set());
 
-    const monsterTemplates = Object.keys(MONSTER_TEMPLATES);
+    const monsterTemplates = Object.keys(BASE_MONSTER_TEMPLATES);
     for (let i = 0; i < 5; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = 5 + Math.random() * 8;
+      const dist = 15 + Math.random() * 24;
       const tid = monsterTemplates[Math.floor(Math.random() * monsterTemplates.length)];
       if (tid) this.spawnMonster(tid, player.x + Math.cos(angle) * dist, player.z + Math.sin(angle) * dist);
     }
@@ -746,7 +807,7 @@ export class WorldRoom extends Room<WorldState> {
     const templates = Object.keys(WEAPON_TEMPLATES);
     for (let i = 0; i < 6; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = 3 + Math.random() * 5;
+      const dist = 9 + Math.random() * 15;
       const templateId = templates[Math.floor(Math.random() * templates.length)];
       if (templateId) this.spawnWeapon(templateId, player.x + Math.cos(angle) * dist, player.z + Math.sin(angle) * dist);
     }

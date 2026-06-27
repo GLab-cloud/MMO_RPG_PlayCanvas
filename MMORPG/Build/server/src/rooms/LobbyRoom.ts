@@ -15,6 +15,7 @@ interface MatchInfo {
   maxPlayers: number;
   players: MatchPlayer[];
   status: 'waiting' | 'in_progress';
+  difficulty: string;
 }
 
 export class LobbyRoom extends Room {
@@ -23,7 +24,7 @@ export class LobbyRoom extends Room {
   private matches: Map<string, MatchInfo> = new Map();
 
   onCreate(_options: any): void {
-    this.onMessage('create_match', (client, data: { name: string; map: string; maxPlayers: number }) => {
+    this.onMessage('create_match', (client, data: { name: string; map: string; maxPlayers: number; difficulty: string }) => {
       const id = this.generateId();
       const match: MatchInfo = {
         id,
@@ -32,6 +33,7 @@ export class LobbyRoom extends Room {
         maxPlayers: Math.min(Math.max(data.maxPlayers || 4, 2), 20),
         players: [{ sessionId: client.sessionId, name: `Player_${client.sessionId.slice(0, 4)}`, isHost: true }],
         status: 'waiting',
+        difficulty: data.difficulty || 'easy',
       };
       this.matches.set(id, match);
       client.send('match_created', { matchId: id });
@@ -62,17 +64,12 @@ export class LobbyRoom extends Room {
 
       match.status = 'in_progress';
 
-      console.log(`[LobbyRoom] Match ${data.matchId} starting - sending match_starting to ${match.players.length} players`);
-
       // Send match_starting to all players with the matchId
       // Clients will use joinOrCreate('world', { matchId }) to join the world room
       for (const player of match.players) {
         const playerClient = this.clients.find((c: any) => c.sessionId === player.sessionId);
         if (playerClient) {
-          playerClient.send('match_starting', { matchId: data.matchId });
-          console.log(`[LobbyRoom] Sent match_starting to player ${player.sessionId}`);
-        } else {
-          console.log(`[LobbyRoom] Player ${player.sessionId} client not found`);
+          playerClient.send('match_starting', { matchId: data.matchId, difficulty: match.difficulty });
         }
       }
 
@@ -139,6 +136,7 @@ export class LobbyRoom extends Room {
       playerCount: m.players.length,
       players: m.players.map(p => ({ sessionId: p.sessionId, name: p.name, isHost: p.isHost })),
       status: m.status,
+      difficulty: m.difficulty,
     }));
   }
 

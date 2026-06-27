@@ -268,6 +268,134 @@ export class AudioManager {
     });
   }
 
+  playUiPanelOpen(): void {
+    const c = this.getCtx();
+    const g = this.gain(0.04);
+    const o = c.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(500, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(800, c.currentTime + 0.12);
+    o.connect(g); o.start(); o.stop(c.currentTime + 0.15);
+  }
+
+  playUiPanelClose(): void {
+    const c = this.getCtx();
+    const g = this.gain(0.03);
+    const o = c.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(600, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(300, c.currentTime + 0.08);
+    o.connect(g); o.start(); o.stop(c.currentTime + 0.1);
+  }
+
+  playUiMatchCreate(): void {
+    const c = this.getCtx();
+    [660, 880, 1047].forEach((f, i) => {
+      const g = this.gain(0.06);
+      const o = c.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+      o.connect(g); o.start(c.currentTime + i * 0.1); o.stop(c.currentTime + i * 0.1 + 0.12);
+    });
+  }
+
+  playUiMatchJoin(): void {
+    const c = this.getCtx();
+    [700, 900].forEach((f, i) => {
+      const g = this.gain(0.05);
+      const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+      o.connect(g); o.start(c.currentTime + i * 0.08); o.stop(c.currentTime + i * 0.08 + 0.1);
+    });
+  }
+
+  playUiMatchLeave(): void {
+    const c = this.getCtx();
+    const g = this.gain(0.04);
+    const o = c.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(400, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(150, c.currentTime + 0.15);
+    o.connect(g); o.start(); o.stop(c.currentTime + 0.18);
+  }
+
+  playUiMatchStart(): void {
+    const c = this.getCtx();
+    [440, 554, 659, 880].forEach((f, i) => {
+      const g = this.gain(0.08);
+      const o = c.createOscillator(); o.type = 'square';
+      o.frequency.value = f;
+      o.connect(g); o.start(c.currentTime + i * 0.12); o.stop(c.currentTime + i * 0.12 + 0.15);
+    });
+  }
+
+  playNpcDialog(npcType: string): void {
+    const c = this.getCtx();
+    switch (npcType) {
+      case 'shop': {
+        [800, 1000, 1200].forEach((f, i) => {
+          const g = this.gain(0.06);
+          const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+          o.connect(g); o.start(c.currentTime + i * 0.05); o.stop(c.currentTime + i * 0.05 + 0.08);
+        });
+        break;
+      }
+      case 'bank': {
+        [600, 400].forEach((f, i) => {
+          const g = this.gain(0.07);
+          const o = c.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+          o.connect(g); o.start(c.currentTime + i * 0.08); o.stop(c.currentTime + i * 0.08 + 0.1);
+        });
+        break;
+      }
+      case 'storage': {
+        const g = this.gain(0.1);
+        const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = 80;
+        o.connect(g); o.start(); o.stop(c.currentTime + 0.08);
+        break;
+      }
+      case 'quest': {
+        [660, 880].forEach((f, i) => {
+          const g = this.gain(0.06);
+          const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+          o.connect(g); o.start(c.currentTime + i * 0.1); o.stop(c.currentTime + i * 0.1 + 0.12);
+        });
+        break;
+      }
+      case 'skill': {
+        [1200, 1500, 1800].forEach((f, i) => {
+          const g = this.gain(0.04);
+          const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+          o.connect(g); o.start(c.currentTime + i * 0.06); o.stop(c.currentTime + i * 0.06 + 0.15);
+        });
+        break;
+      }
+      case 'class': {
+        [440, 660, 880].forEach((f, i) => {
+          const g = this.gain(0.07);
+          const o = c.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+          o.connect(g); o.start(c.currentTime + i * 0.08); o.stop(c.currentTime + i * 0.08 + 0.1);
+        });
+        break;
+      }
+      case 'transport': {
+        const g = this.gain(0.05);
+        const o = c.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(200, c.currentTime);
+        o.frequency.exponentialRampToValueAtTime(600, c.currentTime + 0.3);
+        o.connect(g); o.start(); o.stop(c.currentTime + 0.35);
+        break;
+      }
+      case 'guard': {
+        const g = this.gain(0.08);
+        const o = c.createOscillator(); o.type = 'square';
+        o.frequency.setValueAtTime(400, c.currentTime);
+        o.frequency.exponentialRampToValueAtTime(600, c.currentTime + 0.06);
+        o.connect(g); o.start(); o.stop(c.currentTime + 0.08);
+        break;
+      }
+      default: {
+        const g = this.gain(0.05);
+        const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = 700;
+        o.connect(g); o.start(); o.stop(c.currentTime + 0.06);
+      }
+    }
+  }
+
   playMonsterDeath(): void {
     const c = this.getCtx();
     const g = this.gain(0.15);

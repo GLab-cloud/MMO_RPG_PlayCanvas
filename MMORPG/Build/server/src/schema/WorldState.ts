@@ -52,6 +52,9 @@ export class MonsterState extends Schema {
   @type('number') aggroRange: number = 8;
   @type('number') attackRange: number = 1.5;
   @type('number') xpReward: number = 15;
+  @type('number') fleeThreshold: number = 0.1;
+  @type('number') spawnX: number = 0;
+  @type('number') spawnZ: number = 0;
   @type('string') state: string = 'idle';
   @type('string') targetId: string = '';
 }
