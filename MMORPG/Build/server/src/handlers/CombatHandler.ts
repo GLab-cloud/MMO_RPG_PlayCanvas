@@ -22,21 +22,13 @@ export class CombatHandler {
     const effectiveAttack = weaponType === 'magic' ? player.magicAttack : player.attack;
     const physicalDmg = calculatePhysical(effectiveAttack, targetMonster.defense, player.level, targetMonster.level, 1.0) * critMult;
     const magicalDmg = calculateMagical(player.magicAttack, targetMonster.magicDefense, player.level, targetMonster.level, 0.3);
-    const totalDamage = Math.max(1, Math.floor(physicalDmg + magicalDmg));
+    const totalDamage = Math.max(1, Math.floor((physicalDmg + magicalDmg) * 4));
     targetMonster.hp -= totalDamage;
     if (targetMonster.hp <= 0) {
       targetMonster.hp = 0;
       const xpReward = calculateXpReward(targetMonster.level, player.level);
       const leveledData = this.levelSystem.addXp(player.level, 0, xpReward);
       monsters.delete(targetMonster.id);
-      const lootId = generateId();
-      lootSpawns.set(lootId, {
-        id: lootId,
-        x: targetMonster.x,
-        z: targetMonster.z,
-        items: [{ id: generateId(), name: 'Gold', quantity: Math.floor(Math.random() * 50 + 10) }],
-        despawnTimer: 30,
-      });
       return { monsterId: targetMonster.id, damage: totalDamage, critical, killed: true, xpReward };
     }
     return { monsterId: targetMonster.id, damage: totalDamage, critical, killed: false };
@@ -53,7 +45,7 @@ export class CombatHandler {
     const critical = isCriticalHit(attacker.dexterity);
     const critMult = critical ? 2.0 : 1.0;
     const rawDamage = (attacker.attack * 1.0 - target.defense * 0.5 + attacker.level * 2) * critMult;
-    const finalDamage = Math.max(1, Math.floor(rawDamage * (0.9 + Math.random() * 0.2)));
+    const finalDamage = Math.max(1, Math.floor(rawDamage * (0.9 + Math.random() * 0.2) * 2));
     target.hp -= finalDamage;
     const killed = target.hp <= 0;
     if (killed) target.hp = 0;

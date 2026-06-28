@@ -55,13 +55,15 @@ export class InventoryHandler {
     return { updatedItems: items };
   }
 
-  handlePickup(data: { lootId: string; slot: number }, lootSpawns: Map<string, any>, items: Item[]): { updatedItems: Item[]; lootRemoved: boolean } {
+  handlePickup(data: { lootId: string; slot: number }, lootSpawns: Map<string, any>, items: Item[]): { updatedItems: Item[]; lootRemoved: boolean; lootItems: any[] } {
     const loot = lootSpawns.get(data.lootId);
-    if (!loot) return { updatedItems: items, lootRemoved: false };
-    for (const lootItem of loot.items) {
-      items.push({ ...lootItem, slot: data.slot, equipped: false, type: 'material' });
+    if (!loot) return { updatedItems: items, lootRemoved: false, lootItems: [] };
+    const lootItems = loot.items || [];
+    for (const lootItem of lootItems) {
+      const type: Item['type'] = lootItem.type === 'health_potion' || lootItem.type === 'mana_potion' ? 'consumable' : 'material';
+      items.push({ ...lootItem, id: lootItem.id || lootItem.name + '_' + Date.now(), slot: data.slot, equipped: false, type });
     }
     lootSpawns.delete(data.lootId);
-    return { updatedItems: [...items], lootRemoved: true };
+    return { updatedItems: [...items], lootRemoved: true, lootItems };
   }
 }

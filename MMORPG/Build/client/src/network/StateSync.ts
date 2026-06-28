@@ -8,7 +8,7 @@ interface TrackedEntity {
   lastRotation: number;
   targetRotation: number;
   lastUpdate: number;
-  type: 'player' | 'monster' | 'weapon';
+  type: 'player' | 'monster' | 'weapon' | 'loot';
   nameplate?: pc.Entity;
   hpBar?: pc.Entity;
   templateId?: string;
@@ -88,9 +88,6 @@ export class StateSync {
     for (const m of monsters) {
       const tracked = this.entities.get(m.id);
       if (tracked && tracked.type === 'monster') {
-        tracked.lastPosition.copy(tracked.entity.getLocalPosition());
-        tracked.targetPosition.set(m.x ?? 0, 0.5, m.z ?? 0);
-        tracked.lastUpdate = Date.now();
         const newState = m.state ?? 'idle';
         if (newState !== tracked.aiState) {
           tracked.aiState = newState;
@@ -336,7 +333,7 @@ export class StateSync {
       if (immediate) {
         tracked.entity.destroy();
         this.entities.delete(id);
-      } else if (tracked.type === 'weapon') {
+      } else if (tracked.type === 'weapon' || tracked.type === 'loot') {
         this.pickupAnimation(tracked);
       } else {
         this.deathAnimation(tracked);
@@ -383,6 +380,7 @@ export class StateSync {
 
   private deathAnimation(tracked: TrackedEntity): void {
     const startScale = tracked.entity.getLocalScale().x;
+    const pos = tracked.entity.getLocalPosition().clone();
     const renders = tracked.entity.findComponents('render') as pc.RenderComponent[];
     for (const comp of renders) {
       if (comp && comp.material instanceof pc.StandardMaterial) {
@@ -390,18 +388,38 @@ export class StateSync {
         comp.material.update();
       }
     }
+
+    const flash = new pc.Entity(`${tracked.id}-deathflash`);
+    flash.addComponent('render', { type: 'sphere' });
+    const flashMat = new pc.StandardMaterial();
+    flashMat.diffuse = new pc.Color(1, 0.9, 0.6);
+    flashMat.emissive = new pc.Color(1, 0.7, 0.2);
+    flashMat.opacity = 0.8;
+    flashMat.blendType = pc.BLEND_NORMAL;
+    flashMat.update();
+    flash.render!.material = flashMat;
+    flash.setLocalPosition(pos.x, pos.y, pos.z);
+    flash.setLocalScale(startScale * 2, startScale * 2, startScale * 2);
+    this.app.root.addChild(flash);
+
     let elapsed = 0;
     const interval = setInterval(() => {
       elapsed += 50;
       const t = elapsed / 400;
       if (t >= 1) {
         clearInterval(interval);
+        flash.destroy();
         tracked.entity.destroy();
         this.entities.delete(tracked.id);
         return;
       }
       const s = startScale * (1 - t);
       tracked.entity.setLocalScale(s, s, s);
+      const flashScale = startScale * 2 + t * startScale * 3;
+      flash.setLocalScale(flashScale, flashScale, flashScale);
+      const fadedMat = flash.render!.material as pc.StandardMaterial;
+      fadedMat.opacity = 0.8 * (1 - t);
+      fadedMat.update();
     }, 50);
   }
 
@@ -615,6 +633,17 @@ export class StateSync {
     return { x: pos.x, z: pos.z };
   }
 
+  getLootPositions(): { id: string; x: number; z: number }[] {
+    const result: { id: string; x: number; z: number }[] = [];
+    for (const [id, tracked] of this.entities) {
+      if (tracked.type === 'loot') {
+        const pos = tracked.entity.getLocalPosition();
+        result.push({ id, x: pos.x, z: pos.z });
+      }
+    }
+    return result;
+  }
+
   getWeaponPositions(): { id: string; templateId: string; x: number; z: number }[] {
     const result: { id: string; templateId: string; x: number; z: number }[] = [];
     for (const [id, tracked] of this.entities) {
@@ -657,6 +686,53 @@ export class StateSync {
         tracked.entity.setLocalPosition(pos);
       }
     }
+  }
+
+  addLoot(id: string, data: { x: number; z: number; items: { name: string; type: string }[] }): void {
+    if (this.entities.has(id)) return;
+    const entity = new pc.Entity(`loot-${id}`);
+    const primaryType = data.items?.[0]?.type || 'gold';
+    const color = primaryType === 'health_potion' ? new pc.Color(0.2, 1, 0.3)
+      : primaryType === 'mana_potion' ? new pc.Color(0.2, 0.5, 1)
+      : primaryType === 'weapon' ? new pc.Color(1, 0.7, 0.2)
+      : new pc.Color(1, 0.9, 0.3);
+
+    const glow = new pc.Entity(`${id}-glow`);
+    glow.addComponent('render', { type: 'sphere' });
+    const mat = new pc.StandardMaterial();
+    mat.diffuse = color;
+    mat.emissive = new pc.Color(color.r * 0.4, color.g * 0.4, color.b * 0.4);
+    mat.opacity = 0.5;
+    mat.blendType = pc.BLEND_NORMAL;
+    mat.update();
+    glow.render!.material = mat;
+    glow.setLocalScale(0.25, 0.25, 0.25);
+    entity.addChild(glow);
+
+    const icon = new pc.Entity(`${id}-icon`);
+    icon.addComponent('render', { type: 'box' });
+    const iconMat = new pc.StandardMaterial();
+    iconMat.diffuse = color;
+    iconMat.emissive = new pc.Color(color.r * 0.3, color.g * 0.3, color.b * 0.3);
+    iconMat.update();
+    icon.render!.material = iconMat;
+    icon.setLocalScale(0.15, 0.15, 0.05);
+    entity.addChild(icon);
+
+    entity.setLocalPosition(data.x, 0.3, data.z);
+    this.app.root.addChild(entity);
+    this.entities.set(id, {
+      id, entity,
+      lastPosition: new pc.Vec3(data.x, 0.3, data.z),
+      targetPosition: new pc.Vec3(data.x, 0.3, data.z),
+      lastRotation: 0, targetRotation: 0,
+      lastUpdate: Date.now(),
+      type: 'loot',
+    });
+  }
+
+  removeLoot(id: string): void {
+    this.removeEntity(id, false);
   }
 
   getEntity(id: string): pc.Entity | undefined {

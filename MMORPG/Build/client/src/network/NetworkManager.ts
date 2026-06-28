@@ -37,6 +37,7 @@ export interface CombatCallbacks {
 
 export class NetworkManager {
   onWeaponPickup: ((data: { templateId: string; name: string; attack: number; magicAttack: number; critRate: number; playerId: string }) => void) | null = null;
+  onInventoryUpdated: ((items: { id: string; name: string; quantity: number; type: string }[]) => void) | null = null;
 
   private client!: Client;
   private lobbyRoom: Room | null = null;
@@ -246,6 +247,10 @@ export class NetworkManager {
       this.stateSync.updatePosition(data.id, data.x, data.z, data.rotation);
     });
 
+    this.worldRoom.onMessage('monster:moved', (data: { id: string; x: number; z: number }) => {
+      this.stateSync.updatePosition(data.id, data.x, data.z);
+    });
+
     this.worldRoom.onMessage('combat:damage', (data: { monsterId: string; playerId: string; damage: number; critical: boolean; hp: number; maxHp: number }) => {
       this.stateSync.flashEntity(data.monsterId);
       this.stateSync.onMonsterHPUpdate?.(data.monsterId, data.hp, data.maxHp);
@@ -259,9 +264,12 @@ export class NetworkManager {
       }
     });
 
-    this.worldRoom.onMessage('combat:player_damage', (data: { targetId: string; attackerId: string; damage: number; critical: boolean; hp: number; maxHp: number }) => {
+    this.worldRoom.onMessage('combat:player_damage', (data: { targetId: string; attackerId: string; damage: number; critical: boolean; hp: number; maxHp: number; x?: number; z?: number }) => {
       this.combatCallbacks?.onPlayerDamage(data.attackerId, data.targetId, data.damage, data.critical);
       this.stateSync.onPlayerHPUpdate?.(data.targetId, data.hp, data.maxHp);
+      if (data.x !== undefined && data.z !== undefined) {
+        this.stateSync.updatePosition(data.attackerId, data.x, data.z);
+      }
     });
 
     this.worldRoom.onMessage('pvp:damage', (data: { targetId: string; attackerId: string; damage: number; critical: boolean; hp: number; maxHp: number }) => {
@@ -285,12 +293,24 @@ export class NetworkManager {
       this.combatCallbacks?.onScoreUpdate?.(data.players);
     });
 
-    this.worldRoom.onMessage('loot:spawned', (data: { id: string; x: number; z: number }) => {
-      console.log('Loot spawned:', data);
+    this.worldRoom.onMessage('loot:spawned', (data: { id: string; x: number; z: number; items?: { name: string; type: string }[] }) => {
+      this.stateSync.addLoot(data.id, { x: data.x, z: data.z, items: data.items || [] });
     });
 
     this.worldRoom.onMessage('loot:despawned', (data: { lootId: string }) => {
-      console.log('Loot despawned:', data);
+      this.stateSync.removeLoot(data.lootId);
+    });
+
+    this.worldRoom.onMessage('inventory:updated', (data: { items: { id: string; name: string; quantity: number; type: string }[] }) => {
+      this.onInventoryUpdated?.(data.items);
+    });
+
+    this.worldRoom.onMessage('combat:heal', (data: { amount: number; hp: number; maxHp: number }) => {
+      console.log(`Healed for ${data.amount} HP (${data.hp}/${data.maxHp})`);
+    });
+
+    this.worldRoom.onMessage('combat:mp_restore', (data: { amount: number; mp: number; maxMp: number }) => {
+      console.log(`Restored ${data.amount} MP (${data.mp}/${data.maxMp})`);
     });
 
     this.worldRoom.onMessage('monster:spawned', (data: any) => {

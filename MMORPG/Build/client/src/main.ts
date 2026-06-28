@@ -42,11 +42,15 @@ export class GameClient {
   private playerDef: number = 5;
   private kills: number = 0;
   private deaths: number = 0;
+  private deathScreenShown: boolean = false;
+  private _lastRespawnTime: number = 0;
   private leaderboardData: { name: string; kills: number; deaths: number }[] = [];
 
   private weaponsInventory: { templateId: string; name: string; attack: number; magicAttack: number; critRate: number }[] = [];
   private equippedWeaponIndex: number = -1;
   private currentWeaponType: string = 'fist';
+  private lootInventory: { id: string; name: string; quantity: number; type: string }[] = [];
+  private activeInvTab: 'weapons' | 'loot' = 'weapons';
 
   async initialize(canvas: HTMLCanvasElement): Promise<void> {
     this.app = new App();
@@ -151,6 +155,15 @@ export class GameClient {
         this.ui.updateScore(this.kills, this.deaths);
         this.updateLeaderboard();
       },
+      onPlayerKilledByMonster: (attackerName) => {
+        if (this.playerHp <= 0 && this.deathScreenShown) return;
+        if (this._lastRespawnTime && Date.now() - this._lastRespawnTime < 3000) return;
+        this.playerHp = 0;
+        this.deathScreenShown = true;
+        this.audio.playDeath();
+        this.ui.showDeathScreen(attackerName);
+        this.playerController.die();
+      },
       onPlayerDamage: (attackerId, targetId, damage, critical) => {
         const localId = this.network.getStateSync().localPlayerId;
         if (targetId !== localId) {
@@ -177,12 +190,9 @@ export class GameClient {
 
         if (this.playerHp <= 0) {
           this.playerHp = 0;
-          this.audio.playDeath();
           this.deaths++;
           this.ui.updateScore(this.kills, this.deaths);
           this.updateLeaderboard();
-          this.ui.showDeathScreen('an enemy');
-          this.playerController.die();
         }
       },
     });
@@ -318,7 +328,28 @@ export class GameClient {
       }
     };
 
+    this.network.onInventoryUpdated = (items) => {
+      this.lootInventory = items.map(i => ({
+        id: i.id,
+        name: i.name,
+        quantity: i.quantity,
+        type: i.type,
+      }));
+      if (this.activeInvTab === 'loot') {
+        this.renderInventory();
+      }
+    };
+
     this.ui.setOnRespawn(() => {
+      this._lastRespawnTime = Date.now();
+      this.deathScreenShown = false;
+      if (this.equippedWeaponIndex >= 0 && this.equippedWeaponIndex < this.weaponsInventory.length) {
+        const oldWeapon = this.weaponsInventory[this.equippedWeaponIndex];
+        this.playerAtk -= oldWeapon.attack;
+      }
+      this.equippedWeaponIndex = -1;
+      this.currentWeaponType = '';
+      this.playerController.clearWeapon();
       this.audio.playRespawn();
       this.playerController.respawn();
       this.playerHp = this.playerMaxHp;
@@ -377,6 +408,7 @@ export class GameClient {
 
       this.updateNpcDialog();
       this.updateWeaponPickupHint();
+      this.updateLootPickupHint();
       this.updateNameplates();
     }
     this.inputController.resetDeltas();
@@ -414,18 +446,47 @@ export class GameClient {
     const overlay = document.getElementById('inventory-overlay');
     if (!overlay) return;
     if (overlay.style.display === 'none') {
+      this.activeInvTab = 'weapons';
       this.renderInventory();
       overlay.style.display = 'flex';
       this.audio.playUiPanelOpen();
+      this.setupInventoryTabs();
     } else {
       overlay.style.display = 'none';
       this.audio.playUiPanelClose();
     }
   }
 
+  private setupInventoryTabs(): void {
+    document.querySelectorAll('.inv-tab').forEach(el => {
+      el.removeEventListener('click', this.onInvTabClick);
+    });
+    document.querySelectorAll('.inv-tab').forEach(el => {
+      el.addEventListener('click', this.onInvTabClick);
+    });
+  }
+
+  private onInvTabClick = (e: Event): void => {
+    const btn = e.currentTarget as HTMLElement;
+    const tab = btn.dataset.tab as 'weapons' | 'loot';
+    if (!tab) return;
+    this.activeInvTab = tab;
+    document.querySelectorAll('.inv-tab').forEach(el => el.classList.remove('active'));
+    btn.classList.add('active');
+    this.renderInventory();
+  };
+
   private renderInventory(): void {
     const list = document.getElementById('inventory-list');
     if (!list) return;
+    if (this.activeInvTab === 'weapons') {
+      this.renderWeaponsTab(list);
+    } else {
+      this.renderLootTab(list);
+    }
+  }
+
+  private renderWeaponsTab(list: HTMLElement): void {
     if (this.weaponsInventory.length === 0) {
       list.innerHTML = '<div class="inv-empty">No weapons collected</div>';
       return;
@@ -461,6 +522,26 @@ export class GameClient {
     });
   }
 
+  private renderLootTab(list: HTMLElement): void {
+    if (this.lootInventory.length === 0) {
+      list.innerHTML = '<div class="inv-empty">No loot collected</div>';
+      return;
+    }
+    list.innerHTML = this.lootInventory.map((item) => {
+      const icon = item.type === 'consumable' ? '\uD83E\uDDEA' : '\uD83D\uDCB0';
+      const typeColor = item.type === 'consumable' ? '#22c55e' : '#fbbf24';
+      return `<div class="inv-item">
+        <div class="inv-item-icon" style="background:${typeColor}22;color:${typeColor}">${icon}</div>
+        <div class="inv-item-info">
+          <div class="inv-item-name">${item.name}</div>
+          <div class="inv-item-stats">
+            <div class="inv-item-stat">Qty <span>${item.quantity}</span></div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
   private equipWeapon(index: number): void {
     if (index < 0 || index >= this.weaponsInventory.length) return;
     if (this.equippedWeaponIndex >= 0 && this.equippedWeaponIndex < this.weaponsInventory.length) {
@@ -485,6 +566,18 @@ export class GameClient {
     if (weapon) {
       const name = weapon.templateId.charAt(0).toUpperCase() + weapon.templateId.slice(1);
       hintEl.textContent = `Press F to pick up ${name}`;
+      hintEl.style.display = 'block';
+    } else {
+      hintEl.style.display = 'none';
+    }
+  }
+
+  private updateLootPickupHint(): void {
+    const hintEl = document.getElementById('loot-pickup-hint');
+    if (!hintEl) return;
+    const loot = this.playerController.getNearestLoot();
+    if (loot) {
+      hintEl.textContent = 'Press L to pick up loot';
       hintEl.style.display = 'block';
     } else {
       hintEl.style.display = 'none';

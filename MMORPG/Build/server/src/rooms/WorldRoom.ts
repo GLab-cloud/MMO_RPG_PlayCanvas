@@ -27,11 +27,11 @@ import { hpFromStats, mpFromStats } from '../utils/Formulas.js';
 
 type DifficultyKey = 'easy' | 'medium' | 'hard' | 'hardest';
 
-const DIFFICULTY_MULTIPLIERS: Record<DifficultyKey, { hp: number; attack: number; speed: number; aggroRange: number; fleeThreshold: number }> = {
-  easy: { hp: 1, attack: 1, speed: 1, aggroRange: 1, fleeThreshold: 0.1 },
-  medium: { hp: 1.5, attack: 1.3, speed: 1.1, aggroRange: 1.1, fleeThreshold: 0.15 },
-  hard: { hp: 2.5, attack: 1.8, speed: 1.2, aggroRange: 1.3, fleeThreshold: 0.2 },
-  hardest: { hp: 4, attack: 2.5, speed: 1.4, aggroRange: 1.5, fleeThreshold: 0 },
+const DIFFICULTY_MULTIPLIERS: Record<DifficultyKey, { hp: number; attack: number; speed: number; aggroRange: number; fleeThreshold: number; level: number; xpReward: number; defense: number; magicAttack: number; magicDefense: number }> = {
+  easy: { hp: 1, attack: 0.5, speed: 1, aggroRange: 1, fleeThreshold: 0.1, level: 1, xpReward: 1, defense: 1, magicAttack: 0.5, magicDefense: 1 },
+  medium: { hp: 1.5, attack: 0.65, speed: 1.1, aggroRange: 1.1, fleeThreshold: 0.15, level: 1.2, xpReward: 1.5, defense: 1.2, magicAttack: 0.65, magicDefense: 1.2 },
+  hard: { hp: 2.5, attack: 0.9, speed: 1.2, aggroRange: 1.3, fleeThreshold: 0.2, level: 1.5, xpReward: 2.5, defense: 1.5, magicAttack: 0.9, magicDefense: 1.5 },
+  hardest: { hp: 4, attack: 1.25, speed: 1.4, aggroRange: 1.5, fleeThreshold: 0, level: 2, xpReward: 4, defense: 2, magicAttack: 1.25, magicDefense: 2 },
 };
 
 function applyDifficulty(base: Record<string, any>, difficulty: DifficultyKey): Record<string, any> {
@@ -45,20 +45,25 @@ function applyDifficulty(base: Record<string, any>, difficulty: DifficultyKey): 
     speed: base.speed * mult.speed,
     aggroRange: base.aggroRange * mult.aggroRange,
     fleeThreshold: mult.fleeThreshold,
+    level: Math.max(1, Math.floor(base.level * mult.level)),
+    xpReward: Math.floor(base.xpReward * mult.xpReward),
+    defense: Math.floor(base.defense * mult.defense),
+    magicAttack: Math.floor(base.magicAttack * mult.magicAttack),
+    magicDefense: Math.floor(base.magicDefense * mult.magicDefense),
   };
 }
 
 const BASE_MONSTER_TEMPLATES: Record<string, any> = {
-  rat: { name: 'Rat', level: 1, hp: 30, maxHp: 30, attack: 5, defense: 2, magicAttack: 0, magicDefense: 1, speed: 2, aggroRange: 40, attackRange: 1.5, xpReward: 15 },
-  wolf: { name: 'Wolf', level: 5, hp: 80, maxHp: 80, attack: 12, defense: 5, magicAttack: 0, magicDefense: 2, speed: 4, aggroRange: 40, attackRange: 1.5, xpReward: 40 },
-  bear: { name: 'Bear', level: 10, hp: 200, maxHp: 200, attack: 20, defense: 10, magicAttack: 0, magicDefense: 5, speed: 2.5, aggroRange: 40, attackRange: 2, xpReward: 100 },
-  goblin: { name: 'Goblin', level: 3, hp: 50, maxHp: 50, attack: 8, defense: 3, magicAttack: 2, magicDefense: 3, speed: 3, aggroRange: 40, attackRange: 1.5, xpReward: 25 },
-  orc: { name: 'Orc', level: 8, hp: 150, maxHp: 150, attack: 16, defense: 8, magicAttack: 0, magicDefense: 4, speed: 3, aggroRange: 40, attackRange: 2, xpReward: 70 },
-  troll: { name: 'Troll', level: 15, hp: 400, maxHp: 400, attack: 30, defense: 15, magicAttack: 0, magicDefense: 8, speed: 2, aggroRange: 40, attackRange: 2.5, xpReward: 180 },
-  dragon_whelp: { name: 'Dragon Whelp', level: 20, hp: 500, maxHp: 500, attack: 40, defense: 20, magicAttack: 15, magicDefense: 20, speed: 3.5, aggroRange: 40, attackRange: 3, xpReward: 300 },
-  skeleton: { name: 'Skeleton', level: 7, hp: 100, maxHp: 100, attack: 14, defense: 6, magicAttack: 0, magicDefense: 10, speed: 2.5, aggroRange: 40, attackRange: 1.5, xpReward: 55 },
-  zombie: { name: 'Zombie', level: 6, hp: 120, maxHp: 120, attack: 10, defense: 7, magicAttack: 0, magicDefense: 3, speed: 1.5, aggroRange: 40, attackRange: 1.5, xpReward: 45 },
-  ghost: { name: 'Ghost', level: 12, hp: 100, maxHp: 100, attack: 18, defense: 5, magicAttack: 20, magicDefense: 15, speed: 4, aggroRange: 40, attackRange: 3, xpReward: 130 },
+  rat: { name: 'Rat', level: 1, hp: 30, maxHp: 30, attack: 5, defense: 2, magicAttack: 0, magicDefense: 1, speed: 2.5, aggroRange: 30, attackRange: 0.8, xpReward: 15 },
+  wolf: { name: 'Wolf', level: 5, hp: 80, maxHp: 80, attack: 12, defense: 5, magicAttack: 0, magicDefense: 2, speed: 2.5, aggroRange: 40, attackRange: 0.8, xpReward: 40 },
+  bear: { name: 'Bear', level: 10, hp: 200, maxHp: 200, attack: 20, defense: 10, magicAttack: 0, magicDefense: 5, speed: 2.5, aggroRange: 25, attackRange: 0.9, xpReward: 100 },
+  goblin: { name: 'Goblin', level: 3, hp: 50, maxHp: 50, attack: 8, defense: 3, magicAttack: 2, magicDefense: 3, speed: 2.5, aggroRange: 30, attackRange: 0.8, xpReward: 25 },
+  orc: { name: 'Orc', level: 8, hp: 150, maxHp: 150, attack: 16, defense: 8, magicAttack: 0, magicDefense: 4, speed: 2.5, aggroRange: 28, attackRange: 0.9, xpReward: 70 },
+  troll: { name: 'Troll', level: 15, hp: 400, maxHp: 400, attack: 30, defense: 15, magicAttack: 0, magicDefense: 8, speed: 2.5, aggroRange: 22, attackRange: 1.0, xpReward: 180 },
+  dragon_whelp: { name: 'Dragon Whelp', level: 20, hp: 500, maxHp: 500, attack: 13, defense: 20, magicAttack: 15, magicDefense: 20, speed: 2.5, aggroRange: 35, attackRange: 1.2, xpReward: 300 },
+  skeleton: { name: 'Skeleton', level: 7, hp: 100, maxHp: 100, attack: 14, defense: 6, magicAttack: 0, magicDefense: 10, speed: 2.5, aggroRange: 28, attackRange: 0.8, xpReward: 55 },
+  zombie: { name: 'Zombie', level: 6, hp: 120, maxHp: 120, attack: 10, defense: 7, magicAttack: 0, magicDefense: 3, speed: 2.5, aggroRange: 25, attackRange: 0.8, xpReward: 45 },
+  ghost: { name: 'Ghost', level: 12, hp: 100, maxHp: 100, attack: 18, defense: 5, magicAttack: 20, magicDefense: 15, speed: 2.5, aggroRange: 35, attackRange: 1.0, xpReward: 130 },
 };
 
 const WEAPON_TEMPLATES: Record<string, any> = {
@@ -119,15 +124,26 @@ export class WorldRoom extends Room<WorldState> {
   }
 
   private triggerMonsterAggro(player: PlayerState): void {
+    let nearest: { id: string; dist: number } | null = null;
     for (const [, m] of this.state.monsters) {
       if (m.hp <= 0) continue;
+      if (m.state !== 'idle' || m.targetId) continue;
       const dx = player.x - m.x;
       const dz = player.z - m.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist <= m.aggroRange && m.state === 'idle' && !m.targetId) {
-        m.state = MonsterAIState.Chase;
-        m.targetId = player.id;
+      if (dist <= m.aggroRange && (!nearest || dist < nearest.dist)) {
+        nearest = { id: m.id, dist };
       }
+    }
+    if (nearest) {
+      const monster = this.state.monsters.get(nearest.id);
+      if (monster) {
+        monster.state = MonsterAIState.Chase;
+        monster.targetId = player.id;
+        console.log(`TRIGGER aggro monster=${monster.name}(${nearest.id}) at dist=${nearest.dist.toFixed(2)} from player=${player.name}(${player.id}) at (${player.x.toFixed(2)},${player.z.toFixed(2)})`);
+      }
+    } else {
+      console.log(`TRIGGER aggro FAILED - no idle monster within aggroRange of player=${player.name}(${player.id})`);
     }
   }
 
@@ -293,6 +309,17 @@ export class WorldRoom extends Room<WorldState> {
       const player = this.state.players.get(client.sessionId);
       if (player) {
         player.hp = player.maxHp;
+        this.recentlyRespawned.set(player.id, Date.now());
+        if (player.equippedWeapon) {
+          this.applyWeaponStats(player, player.equippedWeapon, true);
+          player.equippedWeapon = '';
+        }
+        for (const [, m] of this.state.monsters) {
+          if (m.targetId === player.id) {
+            m.state = MonsterAIState.Idle;
+            m.targetId = '';
+          }
+        }
         player.x = 0;
         player.z = 0;
         this.broadcast('player:moved', { id: player.id, x: 0, z: 0, rotation: 0 });
@@ -341,11 +368,9 @@ export class WorldRoom extends Room<WorldState> {
           }
           this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: result.damage, critical: result.critical, hp: monster.hp, maxHp: monster.maxHp });
           this.broadcast('combat:kill', { monsterId: monster.id, playerId: player.id, xp: result.xpReward });
-          this.broadcast('monster:despawned', { id: monster.id });
-          const lootSpawns = this.lootHandler.getLootSpawns();
-          for (const loot of lootSpawns.values()) {
-            this.broadcast('loot:spawned', { id: loot.id, x: loot.x, z: loot.z });
-          }
+          this.broadcast('monster:despawned', { id: monster.id, x: monster.x, z: monster.z });
+          const loot = this.spawnMonsterLoot(monster.x, monster.z, monster.templateId, monster.level);
+          if (loot) this.broadcast('loot:spawned', { id: loot.id, x: loot.x, z: loot.z, items: loot.items });
         } else {
           this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: result.damage, critical: result.critical, hp: monster.hp, maxHp: monster.maxHp });
         }
@@ -363,7 +388,9 @@ export class WorldRoom extends Room<WorldState> {
             this.state.monsters.delete(monster.id);
             this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: dmg, critical: false, hp: 0, maxHp: monster.maxHp });
             this.broadcast('combat:kill', { monsterId: monster.id, playerId: player.id, xp: monster.xpReward });
-            this.broadcast('monster:despawned', { id: monster.id });
+            this.broadcast('monster:despawned', { id: monster.id, x: monster.x, z: monster.z });
+            const loot = this.spawnMonsterLoot(monster.x, monster.z, monster.templateId, monster.level);
+            if (loot) this.broadcast('loot:spawned', { id: loot.id, x: loot.x, z: loot.z, items: loot.items });
           } else {
             this.broadcast('combat:damage', { monsterId: monster.id, playerId: player.id, damage: dmg, critical: false, hp: monster.hp, maxHp: monster.maxHp });
           }
@@ -492,6 +519,32 @@ export class WorldRoom extends Room<WorldState> {
       client.send('inventory:updated', { items: result.updatedItems });
       if (result.lootRemoved) {
         this.broadcast('loot:despawned', { lootId: data.lootId });
+      }
+    });
+
+    this.onMessage('inventory:use', (client, data: { slot: number }) => {
+      const items = this.playerInventories.get(client.sessionId) || [];
+      const idx = items.findIndex(i => i.slot === data.slot && i.type === 'consumable');
+      if (idx < 0) return;
+      const item = items[idx]!;
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      let used = false;
+      if (item.name === 'Health Potion') {
+        const heal = 30;
+        player.hp = Math.min(player.maxHp, player.hp + heal);
+        client.send('combat:heal', { amount: heal, hp: player.hp, maxHp: player.maxHp });
+        used = true;
+      } else if (item.name === 'Mana Potion') {
+        const restore = 20;
+        player.mp = Math.min(player.maxMp, player.mp + restore);
+        client.send('combat:mp_restore', { amount: restore, mp: player.mp, maxMp: player.maxMp });
+        used = true;
+      }
+      if (used) {
+        const result = this.inventoryHandler.handleUse(data, items);
+        this.playerInventories.set(client.sessionId, result.updatedItems);
+        client.send('inventory:updated', { items: result.updatedItems });
       }
     });
 
@@ -674,6 +727,8 @@ export class WorldRoom extends Room<WorldState> {
     });
   }
 
+  private _tickCount = 0;
+
   private startGameLoop(): void {
     this.lastTick = Date.now();
     this.gameLoop = setInterval(() => {
@@ -685,6 +740,7 @@ export class WorldRoom extends Room<WorldState> {
   }
 
   private tick(dt: number): void {
+    this._tickCount++;
     const env = this.environmentSystem.update(dt);
     this.state.timeOfDay = env.timeOfDay;
     this.state.weather = env.weather;
@@ -701,6 +757,7 @@ export class WorldRoom extends Room<WorldState> {
         aggroRange: m.aggroRange,
         attackRange: m.attackRange,
         moveSpeed: m.speed,
+        attack: m.attack,
         state: m.state,
         targetId: m.targetId,
         fleeThreshold: (m as any).fleeThreshold ?? 0.1,
@@ -709,8 +766,24 @@ export class WorldRoom extends Room<WorldState> {
     }
     const aiPlayers = new Map<string, any>();
     for (const [, p] of this.state.players) {
-      aiPlayers.set(p.id, { id: p.id, x: p.x, z: p.z, level: p.level, equippedWeapon: p.equippedWeapon });
+      aiPlayers.set(p.id, { id: p.id, x: p.x, z: p.z, level: p.level, equippedWeapon: p.equippedWeapon, hp: p.hp });
     }
+
+    if (this._tickCount % 20 === 0) {
+      let idle = 0, chase = 0, attack = 0, flee = 0;
+      for (const [, m] of aiMonsters) {
+        if (m.state === 'idle') idle++;
+        else if (m.state === 'chase') chase++;
+        else if (m.state === 'attack') attack++;
+        else if (m.state === 'flee') flee++;
+      }
+      let playerInfo = '';
+      for (const [, p] of aiPlayers) {
+        playerInfo += ` [${p.id.slice(0,6)} at (${p.x.toFixed(1)},${p.z.toFixed(1)}) wep=${p.equippedWeapon || 'none'}]`;
+      }
+      console.log(`TICK ${this._tickCount} monsters: idle=${idle} chase=${chase} attack=${attack} flee=${flee} players=${aiPlayers.size}${playerInfo}`);
+    }
+
     this.aiSystem.update(aiMonsters, aiPlayers, dt);
     for (const [id, aiM] of aiMonsters) {
       const monster = this.state.monsters.get(id);
@@ -723,24 +796,47 @@ export class WorldRoom extends Room<WorldState> {
     }
 
     for (const [id, aiM] of aiMonsters) {
-      if (aiM.state === MonsterAIState.Attack && aiM.targetId && this.monsterAttackCooldown(id, dt)) {
-        const targetPlayer = this.getPlayerByPlayerId(aiM.targetId);
-        if (targetPlayer) {
-          const rawDamage = aiM.level * 2 + Math.random() * 5 - targetPlayer.defense * 0.3;
-          const damage = Math.max(1, Math.floor(rawDamage));
-          targetPlayer.hp -= damage;
-          this.broadcast('combat:player_damage', { targetId: aiM.targetId, attackerId: id, damage, critical: false, hp: targetPlayer.hp, maxHp: targetPlayer.maxHp });
-          if (targetPlayer.hp <= 0) {
-            this.monsterAttackTimers.set(id, 3.0);
-            const monster = this.state.monsters.get(id);
-            if (monster) {
-              monster.state = MonsterAIState.Idle;
-              monster.targetId = '';
-            }
-            this.broadcast('monster:kill', { targetId: aiM.targetId, attackerId: id, attackerName: monster?.name || 'Monster' });
-          }
-        }
+      if (aiM.state === MonsterAIState.Chase || aiM.state === MonsterAIState.Attack) {
+        this.broadcast('monster:moved', { id: aiM.id, x: aiM.x, z: aiM.z });
       }
+    }
+
+    for (const [id, aiM] of aiMonsters) {
+      if (aiM.state !== MonsterAIState.Attack || !aiM.targetId) continue;
+      if (!this.monsterAttackCooldown(id, dt)) continue;
+      const targetPlayer = this.getPlayerByPlayerId(aiM.targetId);
+      if (!targetPlayer || targetPlayer.hp <= 0) continue;
+      const dx = aiM.x - targetPlayer.x;
+      const dz = aiM.z - targetPlayer.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > 10) {
+        const monster = this.state.monsters.get(id);
+        console.log(`DIST=${dist.toFixed(2)} attackRange=${aiM.attackRange} m_state=${aiM.state} m_id=${id} m_name=${monster?.name || '?'} m_x=${aiM.x.toFixed(2)} m_z=${aiM.z.toFixed(2)} p_x=${targetPlayer.x.toFixed(2)} p_z=${targetPlayer.z.toFixed(2)} p_hp=${targetPlayer.hp} p_id=${aiM.targetId}`);
+      }
+      if (dist > (aiM.attackRange || 1.5)) continue;
+      if (this.recentlyRespawned.has(targetPlayer.id) && Date.now() - this.recentlyRespawned.get(targetPlayer.id)! < 200) continue;
+      const baseAtk = (aiM.attack || aiM.level * 2) * 0.5;
+      const rawDamage = baseAtk + Math.random() * 3 - targetPlayer.defense * 0.3;
+      const damage = Math.max(1, Math.floor(rawDamage));
+      targetPlayer.hp -= damage;
+      const monsterRef = this.state.monsters.get(id);
+      console.log(`DAMAGE monster=${monsterRef?.name || '?'}(${id.slice(0,6)}) dist=${dist.toFixed(2)} range=${aiM.attackRange} dmg=${damage} player_hp=${targetPlayer.hp} player_at=(${targetPlayer.x.toFixed(2)},${targetPlayer.z.toFixed(2)}) monster_at=(${aiM.x.toFixed(2)},${aiM.z.toFixed(2)})`);
+      this.broadcast('combat:player_damage', { targetId: aiM.targetId, attackerId: id, damage, critical: false, hp: targetPlayer.hp, maxHp: targetPlayer.maxHp, x: aiM.x, z: aiM.z });
+        if (targetPlayer.hp <= 0) {
+          this.monsterAttackTimers.set(id, 3.0);
+          const monster = this.state.monsters.get(id);
+          if (monster) {
+            monster.state = MonsterAIState.Idle;
+            monster.targetId = '';
+          }
+          for (const [, m] of this.state.monsters) {
+            if (m.targetId === aiM.targetId) {
+              m.state = MonsterAIState.Idle;
+              m.targetId = '';
+            }
+          }
+          this.broadcast('monster:kill', { targetId: aiM.targetId, attackerId: id, attackerName: monster?.name || 'Monster' });
+        }
     }
 
     this.spawnSystem.update(dt, this.state.monsters, (templateId, x, z) => this.spawnMonster(templateId, x, z));
@@ -763,15 +859,42 @@ export class WorldRoom extends Room<WorldState> {
   }
 
   private monsterAttackTimers: Map<string, number> = new Map();
+  private recentlyRespawned: Map<string, number> = new Map();
   private monsterAttackCooldown(id: string, dt: number): boolean {
+    if (!this.monsterAttackTimers.has(id)) {
+      this.monsterAttackTimers.set(id, 2.0 / 3);
+      return false;
+    }
     const timer = this.monsterAttackTimers.get(id) || 0;
     const newTimer = timer - dt;
     if (newTimer <= 0) {
-      this.monsterAttackTimers.set(id, 2.0);
+      this.monsterAttackTimers.set(id, 2.0 / 3);
       return true;
     }
     this.monsterAttackTimers.set(id, newTimer);
     return false;
+  }
+
+  private spawnMonsterLoot(x: number, z: number, templateId: string, level: number): { id: string; x: number; z: number; items: { id: string; name: string; quantity: number; type?: string }[] } | null {
+    const rawItems: { name: string; quantity: number; type?: string; templateId?: string }[] = [];
+    const goldAmount = Math.floor(5 + Math.random() * 20 + level * 2);
+    rawItems.push({ name: 'Gold', quantity: goldAmount, type: 'gold' });
+    if (Math.random() < 0.35) {
+      rawItems.push({ name: 'Health Potion', quantity: 1, type: 'health_potion' });
+    }
+    if (Math.random() < 0.25) {
+      rawItems.push({ name: 'Mana Potion', quantity: 1, type: 'mana_potion' });
+    }
+    if (Math.random() < 0.08) {
+      const templates = Object.keys(WEAPON_TEMPLATES);
+      const tid = templates[Math.floor(Math.random() * templates.length)];
+      if (tid) {
+        rawItems.push({ name: WEAPON_TEMPLATES[tid].name, quantity: 1, type: 'weapon', templateId: tid });
+      }
+    }
+    if (rawItems.length === 0) return null;
+    const loot = this.lootHandler.spawnLoot(x, z, rawItems as any);
+    return { id: loot.id, x: loot.x, z: loot.z, items: loot.items };
   }
 
   private spawnCounter: number = 0;

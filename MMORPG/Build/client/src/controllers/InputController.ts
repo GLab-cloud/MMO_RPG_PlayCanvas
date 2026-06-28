@@ -34,6 +34,7 @@ export class InputController {
   get character(): boolean { return this.enabled && this.keys.has(config.controls.character); }
   get skills(): boolean { return this.enabled && this.keys.has(config.controls.skills); }
   get quests(): boolean { return this.enabled && this.keys.has(config.controls.quests); }
+  get loot(): boolean { return this.enabled && this.keys.has(config.controls.loot); }
   get party(): boolean { return this.enabled && this.keys.has(config.controls.party); }
 
   isSkillSlot(slot: number): boolean {

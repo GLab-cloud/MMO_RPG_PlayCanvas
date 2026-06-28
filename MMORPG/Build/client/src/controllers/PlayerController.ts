@@ -118,6 +118,14 @@ export class PlayerController {
     this.equipVFX();
   }
 
+  clearWeapon(): void {
+    this.weaponType = '';
+    if (this.weaponEntity) {
+      this.weaponEntity.destroy();
+      this.weaponEntity = null;
+    }
+  }
+
   private equipVFX(): void {
     const vfx = new pc.Entity('equip-vfx');
     vfx.addComponent('render', { type: 'sphere' });
@@ -307,6 +315,8 @@ export class PlayerController {
     }
   }
 
+  private deathInterval: ReturnType<typeof setInterval> | null = null;
+
   die(): void {
     this.isDead = true;
     const renders = this.player.findComponents('render') as pc.RenderComponent[];
@@ -317,11 +327,12 @@ export class PlayerController {
       }
     }
     let elapsed = 0;
-    const interval = setInterval(() => {
+    this.deathInterval = setInterval(() => {
       elapsed += 50;
       const t = elapsed / 400;
       if (t >= 1) {
-        clearInterval(interval);
+        if (this.deathInterval) clearInterval(this.deathInterval);
+        this.deathInterval = null;
         this.player.enabled = false;
         return;
       }
@@ -331,6 +342,10 @@ export class PlayerController {
   }
 
   respawn(): void {
+    if (this.deathInterval) {
+      clearInterval(this.deathInterval);
+      this.deathInterval = null;
+    }
     this.isDead = false;
     this.player.setLocalScale(1, 1, 1);
     this.player.setLocalEulerAngles(0, this.player.getLocalEulerAngles().y, 0);
@@ -425,6 +440,38 @@ export class PlayerController {
     }
   }
 
+  pickupNearestLoot(): void {
+    const pos = this.player.getLocalPosition();
+    const loots = this.stateSync.getLootPositions();
+    let nearest: { id: string; dist: number } | null = null;
+    for (const loot of loots) {
+      const dx = loot.x - pos.x;
+      const dz = loot.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < 2.5 && (!nearest || dist < nearest.dist)) {
+        nearest = { id: loot.id, dist };
+      }
+    }
+    if (nearest) {
+      this.network.sendToWorld('inventory:pickup', { lootId: nearest.id, slot: 0 });
+    }
+  }
+
+  getNearestLoot(): { id: string; dist: number } | null {
+    const pos = this.player.getLocalPosition();
+    const loots = this.stateSync.getLootPositions();
+    let nearest: { id: string; dist: number } | null = null;
+    for (const loot of loots) {
+      const dx = loot.x - pos.x;
+      const dz = loot.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < 2.5 && (!nearest || dist < nearest.dist)) {
+        nearest = { id: loot.id, dist };
+      }
+    }
+    return nearest;
+  }
+
   private createGlowEffect(): void {
     const glow = new pc.Entity('attack-glow');
     glow.addComponent('render', { type: 'sphere' });
@@ -513,6 +560,10 @@ export class PlayerController {
     if (this.input.interact) {
       this.input.keys.delete(config.controls.interact);
       this.pickupNearestWeapon();
+    }
+    if (this.input.loot) {
+      this.input.keys.delete(config.controls.loot);
+      this.pickupNearestLoot();
     }
 
     this.player.setLocalPosition(pos);
